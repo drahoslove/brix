@@ -63,6 +63,14 @@ div.box {
   background-color: #eee;
 }
 
+.box:first-child p:last-child {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
 canvas {
   image-rendering: pixelated;
   border: 1px solid #ddd;
@@ -186,16 +194,29 @@ let H = 80
 let cn  // canvas
 let fileinput // vileinputf
 
-const state = {
-  CROP: true,
+const DEFAULT_PRESET = {
+  LIMIT: true,
+  BLACK: true,
+  CHESS: true,
+  DIFFUSION: true,
   BRIGHTNESS: 0,
   CONTRAST: 0,
+  NOISE: 0.125
+}
+const COLORFUL_PRESET = {
   LIMIT: true,
-  DIFFUSION: true,
-  BLACK: true,
+  BLACK: false,
+  CHESS: false,
+  DIFFUSION: false,
+  BRIGHTNESS: 0.25,
+  CONTRAST: 0.5,
+  NOISE: 0.0625
+}
+
+let state = {
+  ...DEFAULT_PRESET,
+  CROP: true,
   SPREAD: 'radial',
-  CHESS: true,
-  NOISE: 0.25,
   COUNTS: [...CLRS_COUNTS.keys()]
     .reduce((map, rgb) => {
       map.set(rgb, 0)
@@ -313,7 +334,22 @@ const Board = ({data, width: W, height: H, setZoomBlockData}) => {
 }
 
 const Boxes = () => {
-  const onfileChange = redo
+  const onfileChange = redo;
+  const preset = (variant) => {
+    if (variant === 'default') {
+      state = {
+        ...state,
+        ...DEFAULT_PRESET,
+      }
+    }
+    if (variant === 'colorful') {
+      state = {
+        ...state,
+        ...COLORFUL_PRESET,
+      }
+    }
+    redo()
+  }
   return html`
   <div class="box">
     <p>
@@ -331,20 +367,22 @@ const Boxes = () => {
         </button>
       </label>
     </p>
+    <p>
+      presets:
+      <a href="javascript:void" onClick=${() => preset('colorful')}>colorful</a>
+      ${' '}
+      <a href="javascript:void" onClick=${() => preset('default')}>matching</a>
+    </p>
   </div>
   <div class="box">
     <p class="center">
       <br/>
-      ${
-        W < H && (
-          html`<button onClick=${() => {[W,H] = [128, 80]; redo()}} type="button">🔄 landscape</button>`
-        )
-      }
-      ${
-        W > H && (
-          html`<button onClick=${() => {[W,H] = [80, 128]; redo()}} type="button">🔄 portrait</button>`
-        )
-      }
+      ${W < H && (
+        html`<button onClick=${() => {[W,H] = [128, 80]; redo()}} type="button">🔄 landscape</button>`
+      )}
+      ${W > H && (
+        html`<button onClick=${() => {[W,H] = [80, 128]; redo()}} type="button">🔄 portrait</button>`
+      )}
       <br/>
       <br/>
       <button onClick=${() => {state.CROP = !state.CROP; redo()}} type="button">crop/stretch</button>
@@ -587,12 +625,12 @@ const onImageLoad = function() {
       g += errorBuffer[i][1]
       b += errorBuffer[i][2]
     }
-    const clr = closestColor(r, g, b)
-    data[i] = clr
-    // circles[i].setAttributeNS(null, 'fill', vecToCss(clr))
+    data[i] = closestColor(r, g, b)
   }
 
   render(html`<${Svgs} data=${data} />`, document.querySelector('.svgs'))
+  render(html`<${Boxes} />`, document.querySelector('.boxes')) // needed to udpate palette
+
 }
 
 function cssToVec (color) {
