@@ -5,6 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Document</title>
+<script src="https://unpkg.com/htm/preact/standalone.umd.js"></script>
 <style>
 body {
   margin: 0;
@@ -22,13 +23,6 @@ div.svgs {
 }
 .portrait div.svgs {
   justify-content: flex-start;
-}
-
-.landscape button[name=landscape] {
-  display: none;
-}
-.portrait button[name=portrait] {
-  display: none;
 }
 
 svg {
@@ -154,114 +148,13 @@ footer a {
 </head> 
 <body class="landscape">
 <div class="svgs">
-  <svg id="svgzoom" xmlns="http://www.w3.org/2000/svg"
-    width="160" height="160" viewBox="0 0 160 160">
-  </svg> 
-  <svg id="svg" xmlns="http://www.w3.org/2000/svg"
-    width="1280" height="800" viewBox="0 0 1280 800">
-  </svg>
 </div>
 <div class="boxes">
-  <div class="box">
-    <p>
-      <b>Custom image generator 🗺️➜🖼️</b>
-      <br>
-      for LEGO World Map <a target="_blank" href="https://www.lego.com/en-us/product/world-map-31203"> set 31203</a>
-    </p>
-    <p>
-      <label class="image-selector">
-        <input type="file" id="fileinput" hidden />
-        <canvas id="canvas" height="80" width="128">
-        </canvas>
-        <button type="button" onclick="fileinput.click()">
-          <b>📂 open image</b>
-        </button>
-      </label>
-    </p>
-  </div>
-  <div class="box">
-    <p class="center">
-      <br>
-      <button onclick="[W,H] = [128, 80]; redo(null, true)" type="button" name="landscape">🔄 landscape</button>
-      <button onclick="[W,H] = [80, 128]; redo(null, true)" type="button" name="portrait">🔄 portrait</button>
-      <br>
-      <br>
-      <button onclick="CROP = !CROP; redo(null)" type="button">crop/stretch</button>
-      <br>
-      <br>
-      <label>Brightness
-        <br>
-        <input id="brightness" type="range" min="-0.5" max="0.5" step="0.025" onchange="BRIGHTNESS = +this.value; redo()">
-        <button type="button" onclick="brightness.value = BRIGHTNESS = 0; redo()"><small>×</small></button>
-      </label>
-      <br>
-      <label>Contrast
-        <br>
-        <input id="contrast" type="range" min="-0.5" max="0.5" step="0.025" onchange="CONTRAST = +this.value; redo()">
-        <button type="button" onclick="contrast.value = CONTRAST = 0; redo()"><small>×</small></button>
-      </label>
-    </p>
-  </div>
-  <div class="box">
-    <p>
-      <label>
-        <input type="checkbox" name="black" onchange="BLACK = this.checked; redo()" checked="true" />
-        allow black
-      </label>
-    </p>
-    <p>
-      <label title="apply error diffusion">
-        <input type="checkbox" name="diffusion" onchange="DIFFUSION = this.checked; redo()" checked="true" />
-        dithering ▒
-      </label>
-    </p>
-    <p>
-      <input type="checkbox" id="limit" name="limit" onchange="LIMIT = this.checked; redo()" checked="true" />
-      <label for="limit" title="use only number of available pieces in the set">
-        limited pieces
-      </label>
-      <span>
-        spread:
-        <label title="radial spread">
-          <input type="radio" name="direaction" value="radial" onclick="SPREAD = 'radial'; redo()" checked>
-          ⮾
-        </label>
-        <label title="squared spread">
-          <input type="radio" name="direaction" value="squared"  onclick="SPREAD = 'squared'; redo()">
-          ⮽
-        </label>
-        <label title="horizontal spread">
-          <input type="radio" name="direaction" value="horizontal"  onclick="SPREAD = 'horizontal'; redo()">
-          ⭾
-        </label>
-        <label title="vertical spread">
-          <input type="radio" name="direaction" value="vertical"  onclick="SPREAD = 'vertical'; redo()">
-          ⭿
-        </label>
-        <br>
-        <label title="checker patter">
-          <input type="checkbox" name="chess" onchange="CHESS = this.checked; redo()" checked="true" />
-          double pass 🙾
-        </label>
-        <br>
-        <label>
-          <input type="range" min="0" max="1" step="0.0625" onchange="NOISE = +this.value; redo()"  value="0.25"/>
-          noise
-        </label>
-      </span>
-    </p>
-    <p class="center">
-      <button onclick="redo()" type="button" title="refresh">⭮</button>
-    </p>
-  </div>
-  <div class="box">
-    <code id="counts">
-    </code>
-    <footer>
-      &copy; <a target="_blank" href="https://draho.cz">draho.cz</a>
-    </footer>
+
 </div>
 <script>
+const { html, render, Component } = htmPreact
+
 const CLRS_COUNTS = Object.entries({
   "#ffffff": 3064, // White
   "#0f355a": 393, // Dark Blue
@@ -281,115 +174,304 @@ const CLRS_COUNTS = Object.entries({
   map.set(cssToVec(color), count)
   return  map
 }, new Map)
-CROP = true
-BRIGHTNESS = 0
-CONTRAST = 0
-LIMIT = true
-DIFFUSION = true
-BLACK = true
-SPREAD = 'radial'
-CHESS = true
-NOISE = 0.25
 
 const Z = 9
-const ZZ = 5  
+const ZZ = 5
+const S = 16
+
 let W = 128
 let H = 80
-const S = 16
-let counts = [...CLRS_COUNTS.keys()]
-  .reduce((map, rgb) => {
-    map.set(rgb, 0)
-    return map
-}, new Map())
 
-const cn = document.querySelector("#canvas")
-const ctx = cn.getContext("2d")
-function init() {
+// refs
+let cn  // canvas
+let fileinput // vileinputf
+
+const state = {
+  CROP: true,
+  BRIGHTNESS: 0,
+  CONTRAST: 0,
+  LIMIT: true,
+  DIFFUSION: true,
+  BLACK: true,
+  SPREAD: 'radial',
+  CHESS: true,
+  NOISE: 0.25,
+  COUNTS: [...CLRS_COUNTS.keys()]
+    .reduce((map, rgb) => {
+      map.set(rgb, 0)
+      return map
+  }, new Map())
+}
+
+const redo = function (e) {
   const portrait = (W < H)
   document.body.classList[portrait ? 'add' : 'remove']('portrait')
   document.body.classList[portrait ? 'remove' : 'add']('landscape')
 
+  render(html`<${Boxes} />`, document.querySelector('.boxes'))
 
-  const NS = "http://www.w3.org/2000/svg"
-  const g = document.querySelector("#svg")
-  g.innerHTML = ""
-  g.setAttributeNS(null, 'width', W * Z)
-  g.setAttributeNS(null, 'height', H * Z)
-  g.setAttributeNS(null, 'viewBox', `0 0 ${W * Z} ${H * Z}`)
-  
-  const gz = document.querySelector("#svgzoom")
-  gz.innerHTML = ""
-  gz.setAttributeNS(null, 'width', S * Z * ZZ)
-  gz.setAttributeNS(null, 'height', S * Z * ZZ)
-  gz.setAttributeNS(null, 'viewBox', `0 0 ${S * Z * ZZ} ${S * Z * ZZ}`)
-  
-  for(let y = 0; y < H/S; y++) {
-    for(let x = 0; x < W/S; x++) {
-      const rect = document.createElementNS(NS, 'rect')
-      rect.setAttributeNS(null, 'x', x*Z*S)
-      rect.setAttributeNS(null, 'y', y*Z*S)
-      rect.setAttributeNS(null, 'width', S * Z)
-      rect.setAttributeNS(null, 'height', S * Z)
-      g.appendChild(rect)
-    }
+  const files = e?.target.files || fileinput?.files || []
+  if (files.length < 1) {
+    const image = new Image()
+    image.onload = onImageLoad
+    image.src = defaultImg
+    return
   }
-  
-  for(let y = 0; y < H; y++) {
-    for(let x = 0; x < W; x++) {
-      const circle = document.createElementNS(NS, 'circle')
-      circle.setAttributeNS(null, 'cx', x*Z + Z/2)
-      circle.setAttributeNS(null, 'cy', y*Z+ Z/2)
-      circle.setAttributeNS(null, 'r', 0.5 * Z)
-      g.appendChild(circle)
-    }
+  let reader = new FileReader()
+  reader.onload = (e) => {
+    let image = new Image()
+    image.onload = onImageLoad
+    image.src = e.target.result
   }
-  
-  for(let y = 0; y < H/S; y++) {
-    for(let x = 0; x < W/S; x++) {
-      const rect = document.createElementNS(NS, 'rect')
-      rect.setAttributeNS(null, 'class', 'overlay')
-      rect.setAttributeNS(null, 'x', x*Z*S)
-      rect.setAttributeNS(null, 'y', y*Z*S)
-      rect.setAttributeNS(null, 'width', S * Z)
-      rect.setAttributeNS(null, 'height', S * Z)
-      g.appendChild(rect)
-      rect.onmouseenter = (((x, y) => function() {
-        const sourceCircles = document.querySelectorAll('#svg circle')
-        const destCircles = document.querySelectorAll('#svgzoom circle')
-  
-        const xStart = x * S
-        const yStart = y * S 
-        for(let yy = 0; yy < S; yy++) {
-          for(let xx = 0; xx <  S; xx++) {
-            const sourceI = (yStart + yy) * W + (xStart+ xx)
-            const destI = yy * S + xx
-            destCircles[destI].setAttributeNS(
-              null,
-              'fill',
-              sourceCircles[sourceI].getAttributeNS(null, 'fill'),
-            )
-          }
-        }
-      })(x, y))
+  reader.readAsDataURL(files[0])
+}
+
+const range = (n) => Array.from({ length: n }).map((_, i) => i)
+
+const ZoomBlock = ({data}) => {
+  return html`
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg"
+      width=${S * Z * ZZ} height=${S * Z * ZZ} viewBox="0 0 ${S * Z * ZZ} ${S * Z * ZZ}"
+    >
+    ${
+      data.map((rgb, i) => {
+        const x = i % S
+        const y = (i - x)/S
+        return html`
+          <circle
+            fill=${vecToCss(rgb)}
+            cx=${x*Z * ZZ + Z/2 * ZZ}
+            cy=${y*Z * ZZ + Z/2 * ZZ}
+            r=${0.5 * Z * ZZ}
+          />
+        `
+      })
     }
+    </svg>
+  `
+}
+
+const Board = ({data, width: W, height: H, setZoomBlockData}) => {
+  const overrect = (x, y) => {
+    const xStart = x * S
+    const yStart = y * S
+    const pickedData = []
+    for(let yy = 0; yy < S; yy++) {
+      for(let xx = 0; xx <  S; xx++) {
+        const sourceI = (yStart + yy) * W + (xStart+ xx)
+        pickedData.push(data[sourceI])
+      }
+    }
+    setZoomBlockData(pickedData)
   }
-  
-  for(let y = 0; y < S; y++) {
-    for(let x = 0; x < S; x++) {
-      const circle = document.createElementNS(NS, 'circle')
-      circle.setAttributeNS(null, 'cx', x*Z * ZZ + Z/2 * ZZ)
-      circle.setAttributeNS(null, 'cy', y*Z * ZZ + Z/2 * ZZ)
-      circle.setAttributeNS(null, 'r', 0.5 * Z * ZZ)
-      gz.appendChild(circle)
+  return html`
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg"
+      width=${W * Z} height=${H * Z} viewBox="0 0 ${W * Z} ${H * Z}"
+    >
+    ${
+      range(H/S).map(y => range(W/S).map(x => ( // TODO use data
+        html`
+          <rect
+            x=${x*Z*S}
+            y=${y*Z*S}
+            width=${S * Z}
+            height=${S * Z}
+          />
+        `
+      )))
     }
+    ${
+      data.map((rgb, i) => {
+        const x = i % W
+        const y = (i - x)/W
+        return html`
+          <circle
+            fill=${vecToCss(rgb)}
+            cx=${x*Z + Z/2}
+            cy=${y*Z + Z/2}
+            r=${0.5 * Z}
+          />
+        `
+      })
+    }
+    ${
+      range(H/S).map(y => range(W/S).map(x => (
+        html`
+          <rect
+            class='overlay'
+            x=${x*Z*S}
+            y=${y*Z*S}
+            width=${S * Z}
+            height=${S * Z}
+            onmouseenter=${() => overrect(x, y)}
+          />
+        `
+      )))
+    }
+    </svg>
+  `
+}
+
+const Boxes = () => {
+  const onfileChange = redo
+  return html`
+  <div class="box">
+    <p>
+      <b>Custom image generator 🗺️➜🖼️</b>
+      <br/>
+      for LEGO World Map <a target="_blank" href="https://www.lego.com/en-us/product/world-map-31203"> set 31203</a>
+    </p>
+    <p>
+      <label class="image-selector">
+        <input type="file" id="fileinput" hidden onChange=${onfileChange} ref=${ref => {fileinput = ref}} />
+        <canvas id="canvas" height=${H} width=${W} ref=${ref => {cn = ref}}>
+        </canvas>
+        <button type="button" onClick=${() => fileinput.click()}>
+          <b>📂 open image</b>
+        </button>
+      </label>
+    </p>
+  </div>
+  <div class="box">
+    <p class="center">
+      <br/>
+      ${
+        W < H && (
+          html`<button onClick=${() => {[W,H] = [128, 80]; redo()}} type="button">🔄 landscape</button>`
+        )
+      }
+      ${
+        W > H && (
+          html`<button onClick=${() => {[W,H] = [80, 128]; redo()}} type="button">🔄 portrait</button>`
+        )
+      }
+      <br/>
+      <br/>
+      <button onClick=${() => {state.CROP = !state.CROP; redo()}} type="button">crop/stretch</button>
+      <br/>
+      <br/>
+      <label>Brightness
+        <br/>
+        <input id="brightness" type="range" min="-0.5" max="0.5" step="0.025"
+          value=${state.BRIGHTNESS}
+          onChange=${(e) => { state.BRIGHTNESS = +e.target.value; redo() }}
+        />
+        <button type="button" onClick=${() => { state.BRIGHTNESS = 0; redo()}}><small>×</small></button>
+      </label>
+      <br/>
+      <label>Contrast
+        <br/>
+        <input id="contrast" type="range" min="-0.5" max="0.5" step="0.025"
+          value=${state.CONTRAST}
+          onChange=${(e) => {state.CONTRAST = +e.target.value; redo() }}
+        />
+        <button type="button" onClick=${() => { state.CONTRAST = 0; redo()}}><small>×</small></button>
+      </label>
+    </p>
+  </div>
+  <div class="box">
+    <p>
+      <label>
+        <input type="checkbox" name="black"
+          onChange=${(e) => {state.BLACK = e.target.checked; redo()}} checked=${state.BLACK}
+        />
+        allow black
+      </label>
+    </p>
+    <p>
+      <label title="apply error diffusion">
+        <input type="checkbox" name="diffusion"
+          onChange=${(e) => {state.DIFFUSION = e.target.checked; redo()}} checked=${state.DIFFUSION}
+        />
+        dithering ▒
+      </label>
+    </p>
+    <p>
+      <input type="checkbox" id="limit" name="limit"
+        onChange=${(e) => {state.LIMIT = e.target.checked; redo()}} checked=${state.LIMIT}
+      />
+      <label for="limit" title="use only number of available pieces in the set">
+        limited pieces
+      </label>
+      <span>
+        spread:
+        <label title="radial spread">
+          <input type="radio" name="direaction" value="radial"
+            onClick=${() => { state.SPREAD = 'radial'; redo()}} checked=${state.SPREAD === 'radial'}
+          />
+          ⮾
+        </label>
+        <label title="squared spread">
+          <input type="radio" name="direaction" value="squared"
+            onClick=${() => { state.SPREAD = 'squared'; redo()}} checked=${state.SPREAD === 'squared'}
+          />
+          ⮽
+        </label>
+        <label title="horizontal spread">
+          <input type="radio" name="direaction" value="horizontal"
+            onClick=${() => { state.SPREAD = 'horizontal'; redo()}} checked=${state.SPREAD === 'horizontal'}
+          />
+          ⭾
+        </label>
+        <label title="vertical spread">
+          <input type="radio" name="direaction" value="vertical"
+            onClick=${() => { state.SPREAD = 'vertical'; redo()}} checked=${state.SPREAD === 'vertical'}
+          />
+          ⭿
+        </label>
+        <br/>
+        <label title="checker patter">
+          <input type="checkbox" name="chess"
+            onChange=${() => {state.CHESS = !state.CHESS; redo()}} checked=${state.CHESS}
+          />
+          double pass 🙾
+        </label>
+        <br/>
+        <label>
+          <input type="range" min="0" max="1" step="0.0625"
+            onChange=${(e) => {state.NOISE = +e.target.value; redo()}} value=${state.NOISE}
+          />
+          noise
+        </label>
+      </span>
+    </p>
+    <p class="center">
+      <button onClick=${redo} type="button" title="refresh">⭮</button>
+    </p>
+  </div>
+  <div class="box">
+    <${Palette} />
+    <footer>
+      © <a target="_blank" href="https://draho.cz">draho.cz</a>
+    </footer>
+  </div>
+  `
+}
+
+class Svgs extends Component {
+  state = {
+    zoomData: [],
+  }
+  render({data}, { zoomData }) {
+    return html`
+      <${ZoomBlock} data=${zoomData} />
+      <${Board}
+        data=${data}
+        width=${W}
+        height=${H}
+        setZoomBlockData=${(zoomData) => { this.setState({ zoomData }) }}
+      />
+    `
   }
 }
 
-init()
-
-onImageLoad = function() {
+const onImageLoad = function() {
+  if (!cn) {
+    return
+  }
+  const ctx = cn.getContext("2d")
   // reset counts
-  counts.forEach((count, rgb, map) => {
+  state.COUNTS.forEach((count, rgb, map) => {
     map.set(rgb, 0)
   })
 
@@ -399,7 +481,7 @@ onImageLoad = function() {
   let srcX = 0, srcY = 0
   let srcW = this.width, srcH = this.height
 
-  if (CROP) {
+  if (state.CROP) {
     let ratio_ratio = (this.width / this.height) / (W / H)
     if (ratio_ratio > 1) { // crop sides
       let diff = srcW - (srcW / ratio_ratio)
@@ -419,7 +501,7 @@ onImageLoad = function() {
     const src = imageData.data
     const dest = imageData.data
   
-    const factor = (CONTRAST + 1) / (1 - CONTRAST)
+    const factor = (state.CONTRAST + 1) / (1 - state.CONTRAST)
     for (let i = 0; i < src.length; i += 4) {
       let [r, g, b] = [src[i+0], src[i+1], src[i+2]]
       // let grey = weight.r*r + weight.g*g + weight.b*b
@@ -427,9 +509,9 @@ onImageLoad = function() {
       g = factor * (g-128) + 128
       b = factor * (b-128) + 128
   
-      r += BRIGHTNESS * 255
-      g += BRIGHTNESS * 255
-      b += BRIGHTNESS * 255
+      r += state.BRIGHTNESS * 255
+      g += state.BRIGHTNESS * 255
+      b += state.BRIGHTNESS * 255
   
       dest[i+0] = r
       dest[i+1] = g
@@ -439,7 +521,7 @@ onImageLoad = function() {
   }
 
   let errorBuffer
-  if (DIFFUSION){
+  if (state.DIFFUSION){
     const filter = [ // The Jarvis, Judice, and Ninke filter
       [ , , , , ,],
       [ , , , , ,],
@@ -465,25 +547,25 @@ onImageLoad = function() {
 
   let maxdelta = Infinity
   let delta = () => 0
-  if (SPREAD === 'radial') {
+  if (state.SPREAD === 'radial') {
     maxdelta = Math.sqrt((W/2)**2 + (H/2)**2)
     delta = ({x, y}) => Math.sqrt((W/2 - x)**2 + (H/2 - y)**2)
   }
-  if (SPREAD === 'vertical') {
+  if (state.SPREAD === 'vertical') {
     maxdelta = H/2
     delta = ({x, y}) => Math.abs(y - H/2)
   }
-  if (SPREAD === 'horizontal') {
+  if (state.SPREAD === 'horizontal') {
     maxdelta = W/2
     delta = ({x, y}) => Math.abs(x - W/2)
   }
-  if (SPREAD === 'squared') {
+  if (state.SPREAD === 'squared') {
     maxdelta = Math.max(W, H)/2
     delta = ({x, y}) => Math.max(Math.abs(x - W/2), Math.abs(y - H/2))
   }
-  order = order.sort((a, b) => delta(a) - delta(b) + NOISE * maxdelta * (Math.random() - 0.5))
+  order = order.sort((a, b) => delta(a) - delta(b) + state.NOISE * maxdelta * (Math.random() - 0.5))
 
-  if (CHESS) {
+  if (state.CHESS) {
     let even = []
     let odd = []
     for (let item of order) {
@@ -497,6 +579,7 @@ onImageLoad = function() {
   }
 
   const indexes = order.map(({i}) => i)
+  let data = []
   for(let i of indexes) {
     let [r, g, b] = [bytes[i*4+0], bytes[i*4+1], bytes[i*4+2]]
     if (errorBuffer) {
@@ -505,9 +588,11 @@ onImageLoad = function() {
       b += errorBuffer[i][2]
     }
     const clr = closestColor(r, g, b)
-    circles[i].setAttributeNS(null, 'fill', vecToCss(clr))
+    data[i] = clr
+    // circles[i].setAttributeNS(null, 'fill', vecToCss(clr))
   }
-  renderPalette()
+
+  render(html`<${Svgs} data=${data} />`, document.querySelector('.svgs'))
 }
 
 function cssToVec (color) {
@@ -519,12 +604,12 @@ function vecToCss (rgb) {
 }
 
 const closestColor = (r, g, b, nolimit=false) => {
-  const COLORS = [...CLRS_COUNTS.keys()].filter(rgb => BLACK ? true : vecToCss(rgb) !== '#000000')
+  const COLORS = [...CLRS_COUNTS.keys()].filter(rgb => state.BLACK ? true : vecToCss(rgb) !== '#000000')
   let closestMatch = COLORS[0]
   let minDiff = Infinity
 
   for (let color of COLORS) {
-    if (LIMIT === true && !nolimit && counts.get(color) >= CLRS_COUNTS.get(color)) {
+    if (state.LIMIT === true && !nolimit && state.COUNTS.get(color) >= CLRS_COUNTS.get(color)) {
       continue
     }
     const [rr, gg, bb] = color
@@ -535,41 +620,32 @@ const closestColor = (r, g, b, nolimit=false) => {
     }
   }
   if (!nolimit) { // increment
-    counts.set(closestMatch, counts.get(closestMatch)+1)
+    state.COUNTS.set(closestMatch, state.COUNTS.get(closestMatch)+1)
   }
 
   return closestMatch
 }
-const renderPalette = () => {
-  document.querySelector('#counts').innerHTML = `
+
+const Palette = () => {
+  return html`
+    <code>
     ${[...CLRS_COUNTS.entries()]
-      .filter(([color]) => BLACK ? true : vecToCss(color) !== '#000000')
+      .filter(([color]) => state.BLACK ? true : vecToCss(color) !== '#000000')
       .map(([color, count], i) => (
-        `${"➊➋➌➍➎➏➐➑➒➓⬤".split('')[i]} <b style="color: ${vecToCss(color)}">⬤</b> ` +
-        `${vecToCss(color)}:\t${count}\t- ${counts.get(color)}\t= <span style="color: ${(count - counts.get(color)) < 0 ? 'red' : 'inherit'}">${count - counts.get(color)}</span>`
-      )).join('</br>')
+        html`
+          ${"➊➋➌➍➎➏➐➑➒➓⬤".split('')[i]} <b style="color: ${vecToCss(color)}">⬤ </b>
+          ${vecToCss(color)}:\t${count}\t- ${state.COUNTS.get(color)}\t=
+          <span style="color: ${(count - state.COUNTS.get(color)) < 0 ? 'red' : 'inherit'}">
+            ${count - state.COUNTS.get(color)}
+          </span>
+          <br />
+        `
+      ))
     }
+    </code>
   `
 }
-fileinput.onchange = redo = function (e, reinit) {
-  if (reinit) {
-    init()
-  }
-  const files = this?.files || e?.dataTransfer.files || fileinput.files || []
-  if (files.length < 1) {
-    const image = new Image()
-    image.onload = onImageLoad
-    image.src = defaultImg
-    return
-  }
-  let reader = new FileReader()
-  reader.onload = (e) => {
-    let image = new Image()
-    image.onload = onImageLoad
-    image.src = e.target.result
-  }
-  reader.readAsDataURL(files[0])
-}
+
 
 function dithering(srcData, destData, getThreshold, filter=[[0]], range=1) {
 	const src = srcData.data
@@ -619,7 +695,7 @@ function dithering(srcData, destData, getThreshold, filter=[[0]], range=1) {
 			}
 		}
 	}
-  counts.forEach((count, rgb, map) => {
+  state.COUNTS.forEach((count, rgb, map) => {
     map.set(rgb, 0)
   })
   return errBuff
@@ -638,7 +714,10 @@ if (window.location.protocol !== 'file:') {
   image.onload = onImageLoad
   image.src = defaultImg
 }
-renderPalette()
+
+render(html`<${Svgs} data=${range(W*H).map(() => [0,0,0])} />`, document.querySelector('.svgs'))
+redo()
+
 </script>
 </body>
 </html>
