@@ -100,6 +100,10 @@ input[type=range] + button {
   position: absolute;
   right: -1.5rem;
 }
+p>span {
+  display: block;
+  margin: 0.25rem 1.25rem;
+}
 p.center {
   text-align: center;
 }
@@ -182,44 +186,42 @@ footer a {
   <div class="box">
     <p>
       <label>
-        <input type="checkbox" name="limit" onchange="LIMIT = this.checked; redo()" checked="true" />
-        limit budget
-      </label>
-    </p>
-    <p>
-      <label>
         <input type="checkbox" name="black" onchange="BLACK = this.checked; redo()" checked="true" />
         allow black
       </label>
     </p>
     <p>
       <label>
-        <input type="checkbox" name="chess" onchange="CHESS = this.checked; redo()" checked="true" />
-        checker pattern
+        <input type="checkbox" name="diffusion" onchange="DIFFUSION = this.checked; redo()" checked="true" />
+        dithering (error diffusion)
       </label>
     </p>
     <p>
-      <label>
-        <input type="radio" name="direaction" value="radial" onclick="SPREAD='radial'; redo()" checked>
-        radial spread
+      <input type="checkbox" id="limit" name="limit" onchange="LIMIT = this.checked; redo()" checked="true" />
+      <label for="limit">
+        limited pieces
       </label>
-      <br>
-      <label>
-        <input type="radio" name="direaction" value="linear"  onclick="SPREAD='linear'; redo()">
-        linear spread
-      </label>
-      <br>
-      <label>
-        <input type="radio" name="direaction" value="random"  onclick="SPREAD='random'; redo()">
-        random spread
-      </label>
-    </p>
-    <p>
-      <label>
-        noise
+      <span>
+        <label>
+          <input type="checkbox" name="chess" onchange="CHESS = this.checked; redo()" checked="true" />
+          two pass (checker)
+        </label>
         <br>
-        <input type="range" min="0" max="1" step="0.0625" onchange="NOISE = +this.value; redo()"  value="0.25"/>
-      </label>
+        <label>
+          <input type="radio" name="direaction" value="radial" onclick="SPREAD='radial'; redo()" checked>
+          radial spread
+        </label>
+        <br>
+        <label>
+          <input type="radio" name="direaction" value="linear"  onclick="SPREAD='linear'; redo()">
+          linear spread
+        </label>
+        <br>
+        <label>
+          <input type="range" min="0" max="1" step="0.0625" onchange="NOISE = +this.value; redo()"  value="0.25"/>
+          noise
+        </label>
+      </span>
     </p>
     <p class="center">
       <button onclick="redo()" type="button">refresh</button>
@@ -253,6 +255,7 @@ CROP = true
 BRIGHTNESS = 0
 CONTRAST = 0
 LIMIT = true
+DIFFUSION = true
 BLACK = true
 SPREAD = 'radial'
 CHESS = true
@@ -374,29 +377,43 @@ onImageLoad = function() {
   const imageData = ctx.getImageData(0, 0, W, H)
 
   // apply brightness and contrast
+  {
+    const src = imageData.data
+    const dest = imageData.data
+  
+    const factor = (CONTRAST + 1) / (1 - CONTRAST)
+    for (let i = 0; i < src.length; i += 4) {
+      let [r, g, b] = [src[i+0], src[i+1], src[i+2]]
+      // let grey = weight.r*r + weight.g*g + weight.b*b
+      r = factor * (r-128) + 128
+      g = factor * (g-128) + 128
+      b = factor * (b-128) + 128
+  
+      r += BRIGHTNESS * 255
+      g += BRIGHTNESS * 255
+      b += BRIGHTNESS * 255
+  
+      dest[i+0] = r
+      dest[i+1] = g
+      dest[i+2] = b
+    }
+    ctx.putImageData(imageData, 0, 0)
+  }
 
+  let errorBuffer
+  if (DIFFUSION){
+    const filter = [ // The Jarvis, Judice, and Ninke filter
+      [ , , , , ,],
+      [ , , , , ,],
+      [ , ,0,7,5,],
+      [3,5,7,5,3,],
+      [1,3,5,3,1,], // (1/48)
+    ]
+    const ditheredData = new ImageData(W, H)
+
+    errorBuffer = dithering(imageData, ditheredData, () => null, filter, 1)
+  }
   const bytes = imageData.data
-  const src = imageData.data
-  const dest = imageData.data
-
-  const factor = (CONTRAST + 1) / (1 - CONTRAST)
-	for (let i = 0; i < src.length; i += 4) {
-		let [r, g, b] = [src[i+0], src[i+1], src[i+2]]
-		// let grey = weight.r*r + weight.g*g + weight.b*b
-		r = factor * (r-128) + 128
-    g = factor * (g-128) + 128
-    b = factor * (b-128) + 128
-
-		r += BRIGHTNESS * 255
-    g += BRIGHTNESS * 255
-    b += BRIGHTNESS * 255
-
-		dest[i+0] = r
-		dest[i+1] = g
-		dest[i+2] = b
-	}
-  ctx.putImageData(imageData, 0, 0)
-
 
   counts = Object
     .keys(CLRS_COUNTS)
@@ -404,11 +421,8 @@ onImageLoad = function() {
   const circles = document.querySelectorAll('#svg circle')
 
   let order = []
-  let cnt = 0
-  for(let y = 0; y < H; y++) {
-    for(let x = 0; x < W; x++) {
-      cnt++
-      const i = (x + y*W) * 4
+  for(let i = 0, y = 0; y < H; y++) {
+    for(let x = 0; x < W; x++, i++) {
       order.push({x, y, i, rad: Math.sqrt((W/2 - x)**2 + (H/2 - y)**2)})
     }
   }
@@ -436,31 +450,47 @@ onImageLoad = function() {
   }
 
   const indexes = order.map(({i}) => i)
+  console.log(errorBuffer)
   for(let i of indexes) {
-    const clr = closestColor(bytes[i], bytes[i+1], bytes[i+2])
-    counts[clr]++
-    circles[i/4].setAttributeNS(null, 'fill', clr)
+    let [r, g, b] = [bytes[i*4+0], bytes[i*4+1], bytes[i*4+2]]
+    if (errorBuffer) {
+      r += errorBuffer[i][0]
+      g += errorBuffer[i][1]
+      b += errorBuffer[i][2]
 
+    }
+    const clr = vecToCss(closestColor(r, g, b))
+    counts[clr]++
+    circles[i].setAttributeNS(null, 'fill', clr)
   }
   renderPalette()
 }
-const closestColor = (r, g, b) => {
+
+const cssToVec = (color) => {
+  const [_, r, g, b] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/).map((xx) => parseInt(xx, 16) ) || []
+  return [r, g, b]
+}
+const vecToCss = (rgb) => {
+  return '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('')
+}
+
+const closestColor = (r, g, b, nolimit=false) => {
   const COLORS = Object.keys(CLRS_COUNTS).filter(clr => BLACK ? true : clr !== '#000000')
   let closestMatch = COLORS[0]
   let minDiff = Infinity
 
   for (let color of COLORS) {
-    if (LIMIT === true && counts[color] >= CLRS_COUNTS[color]) {
+    if (LIMIT === true && !nolimit && counts[color] >= CLRS_COUNTS[color]) {
       continue
     }
-    const [_, rr, gg, bb] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/).map((xx) => parseInt(xx, 16) ) || []
+    const [rr, gg, bb] = cssToVec(color)
     const diff = Math.sqrt((r - rr)**2 + (g - gg)**2 + (b - bb)**2)
     if (diff < minDiff) {
       closestMatch = color
       minDiff = diff
     }
   }
-  return closestMatch
+  return cssToVec(closestMatch)
 }
 const renderPalette = () => {
   document.querySelector('#counts').innerHTML = `
@@ -491,6 +521,61 @@ fileinput.onchange = redo = function (e, reinit) {
     image.src = e.target.result
   }
   reader.readAsDataURL(files[0])
+}
+
+function dithering(srcData, destData, getThreshold, filter=[[0]], range=1) {
+	const src = srcData.data
+	const dest = destData.data
+	const errBuff = Array(dest.length/4) // array of 3vec
+	const width = srcData.width
+	const height = srcData.height
+	const B = 0, W = 255
+
+	const [fox, foy] = [-Math.floor(filter.length/2), -Math.floor(filter[0].length/2)] // filter center offset
+	const weightSum = filter.reduce((sum, line) => sum + line.reduce((sum, w) => sum+w, 0), 0)
+	const spread = range/weightSum
+
+	// init error buffer
+	for(let i = 0; i < errBuff.length; i++) {
+		errBuff[i] = [0,0,0]
+	}
+
+	for(let i = 0; i < src.length; i += 4) {
+		const x = i/4 % width
+		const y = (i/4 - x) / width
+
+		const r = clamp(-Infinity, +Infinity, src[i+0] + errBuff[i/4][0]) // clr
+    const g = clamp(-Infinity, +Infinity, src[i+1] + errBuff[i/4][1])
+    const b = clamp(-Infinity, +Infinity, src[i+2] + errBuff[i/4][2])
+
+		const [_r, _g, _b] = closestColor(r, g, b, true)
+		dest[i+0] = _r
+		dest[i+1] = _g
+		dest[i+2] = _b
+		const err = [r - _r, g - _g, b - _b]
+		// distribute error:
+		for(let j = -foy; j < filter.length; j++) {
+			for(let i = 0; i < filter[j].length; i++) {
+				const weight = filter[j][i]
+				if(!weight) {
+					continue
+				}
+				const xi = x+i+fox
+				const yi = y+j+foy
+				if(xi < 0 || xi >= width || yi < 0 || yi >= height) {
+					continue
+				}
+				errBuff[xi + yi*width][0] += err[0]*weight*spread
+        errBuff[xi + yi*width][1] += err[1]*weight*spread
+				errBuff[xi + yi*width][2] += err[2]*weight*spread
+			}
+		}
+	}
+  return errBuff
+}
+
+function clamp(min, max, val) {
+	return Math.max(min, Math.min(max, val))
 }
 
 const defaultImg = location.search.substr(1).split('&')
