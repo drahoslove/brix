@@ -92,6 +92,13 @@ svg:hover rect.overlay {
 svg rect.overlay:hover{
   fill: rgba(255, 255,255, 0);
 }
+svg:hover ~ svg rect.overlay {
+  fill: rgba(127, 127,127, 0.75);
+  visibility: visible;
+}
+svg:hover ~ svg rect.overlay.selected {
+  fill: rgba(255, 255,255, 0);
+}
 label {
   position: relative;
   cursor: pointer;
@@ -161,7 +168,7 @@ footer a {
 
 </div>
 <script>
-const { html, render, Component } = htmPreact
+const { html, render, Component, useState } = htmPreact
 
 const CLRS_COUNTS = Object.entries({
   "#ffffff": 3064, // White
@@ -202,7 +209,7 @@ const MATCHING_PRESET = {
   CHESS: true,
   DIFFUSION: true,
   BRIGHTNESS: 0,
-  CONTRAST: 0,
+  CONTRAST: 0.125,
   NOISE: 0.125
 }
 const COLORFUL_PRESET = {
@@ -280,6 +287,11 @@ const ZoomBlock = ({data}) => {
 }
 
 const Board = ({data, width: W, height: H, setZoomBlock}) => {
+  const [zoom, setZoom] = useState({x:0, y:0})
+  const onMouseOverlay = (x, y) => {
+    setZoom({x, y})
+    setZoomBlock(x, y)
+  }
   return html`
     <svg id="svg" xmlns="http://www.w3.org/2000/svg"
       width=${W * Z} height=${H * Z} viewBox="0 0 ${W * Z} ${H * Z}"
@@ -314,12 +326,12 @@ const Board = ({data, width: W, height: H, setZoomBlock}) => {
       range(H/S).map(y => range(W/S).map(x => (
         html`
           <rect
-            class='overlay'
+            class='overlay ${zoom.x === x && zoom.y === y ? 'selected' : ''}'
             x=${x*Z*S}
             y=${y*Z*S}
             width=${S * Z}
             height=${S * Z}
-            onmouseenter=${() => setZoomBlock(x, y)}
+            onmouseenter=${() => onMouseOverlay(x, y)}
           />
         `
       )))
