@@ -272,19 +272,7 @@ const ZoomBlock = ({data}) => {
   `
 }
 
-const Board = ({data, width: W, height: H, setZoomBlockData}) => {
-  const overrect = (x, y) => {
-    const xStart = x * S
-    const yStart = y * S
-    const pickedData = []
-    for(let yy = 0; yy < S; yy++) {
-      for(let xx = 0; xx <  S; xx++) {
-        const sourceI = (yStart + yy) * W + (xStart+ xx)
-        pickedData.push(data[sourceI])
-      }
-    }
-    setZoomBlockData(pickedData)
-  }
+const Board = ({data, width: W, height: H, setZoomBlock}) => {
   return html`
     <svg id="svg" xmlns="http://www.w3.org/2000/svg"
       width=${W * Z} height=${H * Z} viewBox="0 0 ${W * Z} ${H * Z}"
@@ -324,7 +312,7 @@ const Board = ({data, width: W, height: H, setZoomBlockData}) => {
             y=${y*Z*S}
             width=${S * Z}
             height=${S * Z}
-            onmouseenter=${() => overrect(x, y)}
+            onmouseenter=${() => setZoomBlock(x, y)}
           />
         `
       )))
@@ -488,16 +476,26 @@ const Boxes = () => {
 
 class Svgs extends Component {
   state = {
-    zoomData: [],
+    zoomBlock: {x: 0, y: 0},
   }
-  render({data}, { zoomData }) {
+
+  render({data}, { zoomBlock: {x, y} }) {
+    const xStart = x * S
+    const yStart = y * S
+    const zoomData = []
+    for(let yy = 0; yy < S; yy++) {
+      for(let xx = 0; xx <  S; xx++) {
+        const sourceI = (yStart + yy) * W + (xStart+ xx)
+        zoomData.push(data[sourceI])
+      }
+    }
     return html`
       <${ZoomBlock} data=${zoomData} />
       <${Board}
         data=${data}
         width=${W}
         height=${H}
-        setZoomBlockData=${(zoomData) => { this.setState({ zoomData }) }}
+        setZoomBlock=${(x, y) => { this.setState({ zoomBlock: {x, y} }) }}
       />
     `
   }
@@ -507,7 +505,7 @@ const onImageLoad = function() {
   if (!cn) {
     return
   }
-  const ctx = cn.getContext("2d")
+  const ctx = cn.getContext("2d", { willReadFrequently: true })
   // reset counts
   state.COUNTS.forEach((count, rgb, map) => {
     map.set(rgb, 0)
