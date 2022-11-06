@@ -149,7 +149,7 @@ footer a {
     height: auto;
   }
   svg:nth-child(1) {
-    position: relative;
+    /* position: relative; */
   }
 }
 </style>
@@ -183,6 +183,8 @@ const CLRS_COUNTS = Object.entries({
   return  map
 }, new Map)
 
+const rand = (n) =>  Math.floor(Math.random()*n)
+
 const Z = 9
 const ZZ = 5
 const S = 16
@@ -194,7 +196,7 @@ let H = 80
 let cn  // canvas
 let fileinput // vileinputf
 
-const DEFAULT_PRESET = {
+const MATCHING_PRESET = {
   LIMIT: true,
   BLACK: true,
   CHESS: true,
@@ -214,9 +216,14 @@ const COLORFUL_PRESET = {
 }
 
 let state = {
-  ...DEFAULT_PRESET,
+  // ...MATCHING_PRESET,
+  ...COLORFUL_PRESET,
+  BRIGHTNESS: (rand(8)-2)/16,
+  CONTRAST: (rand(4)+4)/16,
+  BLACK: !rand(2),
+  NOISE: rand(4) * 1/16,
   CROP: true,
-  SPREAD: 'radial',
+  SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
   COUNTS: [...CLRS_COUNTS.keys()]
     .reduce((map, rgb) => {
       map.set(rgb, 0)
@@ -327,7 +334,7 @@ const Boxes = () => {
     if (variant === 'default') {
       state = {
         ...state,
-        ...DEFAULT_PRESET,
+        ...MATCHING_PRESET,
       }
     }
     if (variant === 'colorful') {
