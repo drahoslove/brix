@@ -10,7 +10,6 @@
 <style>
 body {
   margin: 0;
-  overflow: hidden;
   font-family:Arial, Helvetica, sans-serif
 }
 div.boxes, div.svgs {
@@ -22,9 +21,6 @@ div.boxes, div.svgs {
 div.svgs {
   flex-direction: row;
 }
-.portrait div.svgs {
-  justify-content: flex-start;
-}
 
 svg {
   background-color: #111;
@@ -34,26 +30,20 @@ svg {
   border: 0.5rem solid #ddd;
   border-radius: 0.5rem;
   width: auto;
+  height: auto;
 }
 
 div.boxes {
-  position: fixed;
+  position: relative;
   bottom: 0;
   right: 0;
   align-items: stretch;
   width: 100%;
   height: auto;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.portrait div.boxes {
-  /* position: inherit; */
-  top: 0;
-  bottom: initial;
-  flex-direction: column;
-  width: auto;
-  height: 100%;
-}
 
 div.box {
   position: relative;
@@ -106,6 +96,9 @@ label {
   margin: 0.2rem 0;
   display: inline-block;
 }
+label > * {
+  vertical-align: bottom;
+}
 label.image-selector {
   position: absolute;
   top: 1rem; left: 0; right: 0; bottom: 0;
@@ -116,9 +109,8 @@ label.image-selector {
   justify-content: center;
   align-items: center;
 }
-input[type=range] + button {
-  position: absolute;
-  right: -1.5rem;
+button.close {
+  padding: 0;
 }
 p>span {
   display: block;
@@ -133,6 +125,9 @@ footer {
   bottom: 0.5rem;
   right: 0.5rem;
   color: #999;
+}
+a {
+  color: #777;
 }
 footer a {
   color: #999;
@@ -189,6 +184,7 @@ const COLORS_COUNTS = Object.entries({
 }, new Map)
 
 const rand = (n) =>  Math.floor(Math.random()*n)
+const range = (n) => Array.from({ length: n }).map((_, i) => i)
 
 const Z = 9
 const ZZ = 5
@@ -233,13 +229,14 @@ let state = {
     .reduce((map, rgb) => {
       map.set(rgb, 0)
       return map
-  }, new Map())
+  }, new Map()),
+  data: range(W*H).map(() => [0,0,0]),
 }
 
 const redo = function (e) {
   const portrait = (W < H)
-  document.body.classList[portrait ? 'add' : 'remove']('portrait')
-  document.body.classList[portrait ? 'remove' : 'add']('landscape')
+  // document.body.classList[portrait ? 'add' : 'remove']('portrait')
+  // document.body.classList[portrait ? 'remove' : 'add']('landscape')
 
   render(html`<${Boxes} />`, document.querySelector('.boxes'))
 
@@ -258,8 +255,6 @@ const redo = function (e) {
   }
   reader.readAsDataURL(files[0])
 }
-
-const range = (n) => Array.from({ length: n }).map((_, i) => i)
 
 const ZoomBlock = ({data}) => {
   return html`
@@ -372,14 +367,6 @@ const Boxes = () => {
         </button>
       </label>
     </p>
-    <p>
-      presets:${' '}
-      <a href="javascript:void" onClick=${() => preset('colorful')}>colorful</a>
-      ${' '}
-      <a href="javascript:void" onClick=${() => preset('default')}>matching</a>
-    </p>
-  </div>
-  <div class="box">
     <p class="center">
       <br/>
       ${W < H && (
@@ -393,12 +380,20 @@ const Boxes = () => {
         </button>`
       )}
       <br/>
-      <br/>
       <button onClick=${() => {state.CROP = !state.CROP; redo()}} type="button">
         <span class="mdi mdi-${state.CROP ? 'stretch-to-page-outline' : 'content-cut'}" />
         ${state.CROP ? ' stretch' : ' crop'}
       </button>
-      <br/>
+    </p>
+  </div>
+  <div class="box">
+    <p>
+      presets:${' '}
+      <a href="javascript:void" onClick=${() => preset('colorful')}>colorful</a>
+      ${' '}
+      <a href="javascript:void" onClick=${() => preset('default')}>matching</a>
+    </p>
+    <p class="center">
       <br/>
       <label>Brightness
         <br/>
@@ -407,7 +402,7 @@ const Boxes = () => {
           value=${state.BRIGHTNESS}
           onChange=${(e) => { state.BRIGHTNESS = +e.target.value; redo() }}
         />
-        <button type="button" onClick=${() => { state.BRIGHTNESS = 0; redo()}} title="default brightness">
+        <button class="close" type="button" onClick=${() => { state.BRIGHTNESS = 0; redo()}} title="default brightness">
           <span class="mdi small mdi-close"/>
         </button>
       </label>
@@ -419,7 +414,7 @@ const Boxes = () => {
           value=${state.CONTRAST}
           onChange=${(e) => {state.CONTRAST = +e.target.value; redo() }}
         />
-        <button type="button" onClick=${() => { state.CONTRAST = 0; redo()}}  title="default contrast">
+        <button class="close" type="button" onClick=${() => { state.CONTRAST = 0; redo()}}  title="default contrast">
           <span class="mdi small mdi-close"/>
         </button>
       </label>
@@ -489,11 +484,13 @@ const Boxes = () => {
               double pass <span class="mdi mdi-checkerboard"/>
             </label>
             <br/>
-            <label>
+            <label class="center">
+              noise
+              <br />
+              <span class="mdi mdi-snowflake"/>
               <input type="range" min="0" max="1" step="0.0625"
                 onChange=${(e) => {state.NOISE = +e.target.value; redo()}} value=${state.NOISE}
               />
-              noise <span class="mdi mdi-snowflake"/>
             </label>
           </span>`
         )
@@ -537,6 +534,27 @@ class Svgs extends Component {
       />
     `
   }
+}
+
+const Palette = () => {
+  return html`
+    <code>
+    ${[...COLORS_COUNTS.entries()]
+      .filter(([color]) => state.BLACK ? true : vecToCss(color) !== '#000000')
+      .map(([color, count], i) => (
+        html`
+          <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
+          <b style="color: ${vecToCss(color)}"> <span class="mdi mdi-circle" /> </b>
+          ${vecToCss(color)}:\t${count}\t- ${state.COUNTS.get(color)}${` = `}
+          <span style="color: ${(count - state.COUNTS.get(color)) < 0 ? 'red' : 'inherit'}">
+            ${count - state.COUNTS.get(color)}
+          </span>
+          <br />
+        `
+      ))
+    }
+    </code>
+  `
 }
 
 const onImageLoad = function() {
@@ -664,7 +682,9 @@ const onImageLoad = function() {
     data[i] = closestColor(r, g, b)
   }
 
-  render(html`<${Svgs} data=${data} />`, document.querySelector('.svgs'))
+  state.data = data
+
+  render(html`<${Svgs} data=${state.data} />`, document.querySelector('.svgs'))
   render(html`<${Boxes} />`, document.querySelector('.boxes')) // needed to udpate palette
 
 }
@@ -699,28 +719,6 @@ const closestColor = (r, g, b, noLimit=false) => {
 
   return closestMatch
 }
-
-const Palette = () => {
-  return html`
-    <code>
-    ${[...COLORS_COUNTS.entries()]
-      .filter(([color]) => state.BLACK ? true : vecToCss(color) !== '#000000')
-      .map(([color, count], i) => (
-        html`
-          <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
-          <b style="color: ${vecToCss(color)}"> <span class="mdi mdi-circle" /> </b>
-          ${vecToCss(color)}:\t${count}\t- ${state.COUNTS.get(color)}${` = `}
-          <span style="color: ${(count - state.COUNTS.get(color)) < 0 ? 'red' : 'inherit'}">
-            ${count - state.COUNTS.get(color)}
-          </span>
-          <br />
-        `
-      ))
-    }
-    </code>
-  `
-}
-
 
 function dithering(srcData, destData, getThreshold, filter=[[0]], range=1) {
 	const src = srcData.data
@@ -790,7 +788,7 @@ if (window.location.protocol !== 'file:') {
   image.src = defaultImg
 }
 
-render(html`<${Svgs} data=${range(W*H).map(() => [0,0,0])} />`, document.querySelector('.svgs'))
+render(html`<${Svgs} data=${state.data} />`, document.querySelector('.svgs'))
 redo()
 
 </script>
