@@ -5,6 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Document</title>
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css"></style>
 <script src="https://unpkg.com/htm/preact/standalone.umd.js"></script>
 <style>
 body {
@@ -127,13 +128,6 @@ p.center {
   text-align: center;
 }
 
-input[name=limit]:checked ~ span {
-  display: block;
-}
-input[name=limit] ~ span {
-  display: none;
-}
-
 footer {
   position: absolute;
   bottom: 0.5rem;
@@ -142,6 +136,10 @@ footer {
 }
 footer a {
   color: #999;
+}
+
+.small {
+  font-size: 75%;
 }
 
 @media (max-aspect-ratio: 1/1) {
@@ -170,7 +168,7 @@ footer a {
 <script>
 const { html, render, Component, useState } = htmPreact
 
-const CLRS_COUNTS = Object.entries({
+const COLORS_COUNTS = Object.entries({
   "#ffffff": 3064, // White
   "#0f355a": 393, // Dark Blue
 
@@ -201,7 +199,7 @@ let H = 80
 
 // refs
 let cn  // canvas
-let fileinput // vileinputf
+let fileInput // file input
 
 const MATCHING_PRESET = {
   LIMIT: true,
@@ -231,7 +229,7 @@ let state = {
   NOISE: rand(4) * 1/16,
   CROP: true,
   SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
-  COUNTS: [...CLRS_COUNTS.keys()]
+  COUNTS: [...COLORS_COUNTS.keys()]
     .reduce((map, rgb) => {
       map.set(rgb, 0)
       return map
@@ -245,7 +243,7 @@ const redo = function (e) {
 
   render(html`<${Boxes} />`, document.querySelector('.boxes'))
 
-  const files = e?.target.files || fileinput?.files || []
+  const files = e?.target.files || fileInput?.files || []
   if (files.length < 1) {
     const image = new Image()
     image.onload = onImageLoad
@@ -341,7 +339,7 @@ const Board = ({data, width: W, height: H, setZoomBlock}) => {
 }
 
 const Boxes = () => {
-  const onfileChange = redo;
+  const onFileChange = redo;
   const preset = (variant) => {
     if (variant === 'default') {
       state = {
@@ -360,22 +358,22 @@ const Boxes = () => {
   return html`
   <div class="box">
     <p>
-      <b>Custom image generator 🗺️➜🖼️</b>
+      <b>Custom image generator <span class="mdi mdi-earth" /><span class="mdi mdi-arrow-right" /><span class="mdi mdi-file-image" /></b>
       <br/>
       for LEGO World Map <a target="_blank" href="https://www.lego.com/en-us/product/world-map-31203"> set 31203</a>
     </p>
     <p>
       <label class="image-selector">
-        <input type="file" id="fileinput" hidden onChange=${onfileChange} ref=${ref => {fileinput = ref}} />
+        <input type="file" id="fileinput" hidden onChange=${onFileChange} ref=${ref => {fileInput = ref}} />
         <canvas id="canvas" height=${H} width=${W} ref=${ref => {cn = ref}}>
         </canvas>
-        <button type="button" onClick=${() => fileinput.click()}>
-          <b>📂 open image</b>
+        <button type="button" onClick=${() => fileInput.click()}>
+          <b><span class="mdi mdi-folder-image"/> open image</b>
         </button>
       </label>
     </p>
     <p>
-      presets:
+      presets:${' '}
       <a href="javascript:void" onClick=${() => preset('colorful')}>colorful</a>
       ${' '}
       <a href="javascript:void" onClick=${() => preset('default')}>matching</a>
@@ -385,32 +383,45 @@ const Boxes = () => {
     <p class="center">
       <br/>
       ${W < H && (
-        html`<button onClick=${() => {[W,H] = [128, 80]; redo()}} type="button">🔄 landscape</button>`
+        html`<button onClick=${() => {[W,H] = [128, 80]; redo()}} type="button">
+          <span class="mdi mdi-phone-rotate-landscape"/> landscape
+        </button>`
       )}
       ${W > H && (
-        html`<button onClick=${() => {[W,H] = [80, 128]; redo()}} type="button">🔄 portrait</button>`
+        html`<button onClick=${() => {[W,H] = [80, 128]; redo()}} type="button">
+          <span class="mdi mdi-phone-rotate-portrait"/> portrait
+        </button>`
       )}
       <br/>
       <br/>
-      <button onClick=${() => {state.CROP = !state.CROP; redo()}} type="button">crop/stretch</button>
+      <button onClick=${() => {state.CROP = !state.CROP; redo()}} type="button">
+        <span class="mdi mdi-${state.CROP ? 'stretch-to-page-outline' : 'content-cut'}" />
+        ${state.CROP ? ' stretch' : ' crop'}
+      </button>
       <br/>
       <br/>
       <label>Brightness
         <br/>
+        <span class="mdi mdi-lightbulb-on-${Math.round((state.BRIGHTNESS + 0.5) * 8 + 1)*10}" />
         <input id="brightness" type="range" min="-0.5" max="0.5" step="0.025"
           value=${state.BRIGHTNESS}
           onChange=${(e) => { state.BRIGHTNESS = +e.target.value; redo() }}
         />
-        <button type="button" onClick=${() => { state.BRIGHTNESS = 0; redo()}}><small>×</small></button>
+        <button type="button" onClick=${() => { state.BRIGHTNESS = 0; redo()}} title="default brightness">
+          <span class="mdi small mdi-close"/>
+        </button>
       </label>
       <br/>
       <label>Contrast
         <br/>
+        <span class="mdi mdi-contrast-circle" />
         <input id="contrast" type="range" min="-0.5" max="0.5" step="0.025"
           value=${state.CONTRAST}
           onChange=${(e) => {state.CONTRAST = +e.target.value; redo() }}
         />
-        <button type="button" onClick=${() => { state.CONTRAST = 0; redo()}}><small>×</small></button>
+        <button type="button" onClick=${() => { state.CONTRAST = 0; redo()}}  title="default contrast">
+          <span class="mdi small mdi-close"/>
+        </button>
       </label>
     </p>
   </div>
@@ -428,60 +439,68 @@ const Boxes = () => {
         <input type="checkbox" name="diffusion"
           onChange=${(e) => {state.DIFFUSION = e.target.checked; redo()}} checked=${state.DIFFUSION}
         />
-        dithering ▒
+        dithering <span class="mdi mdi-gradient-vertical"/>
       </label>
     </p>
     <p>
       <input type="checkbox" id="limit" name="limit"
-        onChange=${(e) => {state.LIMIT = e.target.checked; redo()}} checked=${state.LIMIT}
+        onChange=${(e) => {state.LIMIT = !e.target.checked; redo()}} checked=${!state.LIMIT}
       />
-      <label for="limit" title="use only number of available pieces in the set">
-        limited pieces
+      <label for="limit" title="use more pieces than in the set">
+        unlimited pieces
       </label>
-      <span>
-        spread:
-        <label title="radial spread">
-          <input type="radio" name="direaction" value="radial"
-            onClick=${() => { state.SPREAD = 'radial'; redo()}} checked=${state.SPREAD === 'radial'}
-          />
-          ⮾
-        </label>
-        <label title="squared spread">
-          <input type="radio" name="direaction" value="squared"
-            onClick=${() => { state.SPREAD = 'squared'; redo()}} checked=${state.SPREAD === 'squared'}
-          />
-          ⮽
-        </label>
-        <label title="horizontal spread">
-          <input type="radio" name="direaction" value="horizontal"
-            onClick=${() => { state.SPREAD = 'horizontal'; redo()}} checked=${state.SPREAD === 'horizontal'}
-          />
-          ⭾
-        </label>
-        <label title="vertical spread">
-          <input type="radio" name="direaction" value="vertical"
-            onClick=${() => { state.SPREAD = 'vertical'; redo()}} checked=${state.SPREAD === 'vertical'}
-          />
-          ⭿
-        </label>
-        <br/>
-        <label title="checker patter">
-          <input type="checkbox" name="chess"
-            onChange=${() => {state.CHESS = !state.CHESS; redo()}} checked=${state.CHESS}
-          />
-          double pass 🙾
-        </label>
-        <br/>
-        <label>
-          <input type="range" min="0" max="1" step="0.0625"
-            onChange=${(e) => {state.NOISE = +e.target.value; redo()}} value=${state.NOISE}
-          />
-          noise
-        </label>
-      </span>
+      ${
+        state.LIMIT && (
+          html`<span>
+            spread${' '}
+            <label title="radial spread">
+              <button type="button" title="radial"
+                onClick=${() => { state.SPREAD = 'radial'; redo()}} disabled=${state.SPREAD === 'radial'}
+              >
+                <span class="mdi mdi-circle-slice-8"/>
+              </button>
+            </label>
+            <label title="squared spread">
+              <button type="button" title="squared"
+                onClick=${() => { state.SPREAD = 'squared'; redo()}} disabled=${state.SPREAD === 'squared'}
+              >
+                <span class="mdi mdi-checkbox-intermediate"/>
+              </button>
+            </label>
+            <label title="horizontal spread">
+              <button type="button" title="horizontal"
+                onClick=${() => { state.SPREAD = 'horizontal'; redo()}} disabled=${state.SPREAD === 'horizontal'}
+              >
+                <span class="mdi mdi-view-day mdi-rotate-90"/>
+              </button>
+            </label>
+            <label title="vertical spread">
+              <button type="button" title="vertical"
+                onClick=${() => { state.SPREAD = 'vertical'; redo()}} disabled=${state.SPREAD === 'vertical'}
+              >
+                <span class="mdi mdi-view-day"/>
+              </button>
+            </label>
+            <br/>
+            <label title="checker patter">
+              <input type="checkbox" name="chess"
+                onChange=${() => {state.CHESS = !state.CHESS; redo()}} checked=${state.CHESS}
+              />
+              double pass <span class="mdi mdi-checkerboard"/>
+            </label>
+            <br/>
+            <label>
+              <input type="range" min="0" max="1" step="0.0625"
+                onChange=${(e) => {state.NOISE = +e.target.value; redo()}} value=${state.NOISE}
+              />
+              noise <span class="mdi mdi-snowflake"/>
+            </label>
+          </span>`
+        )
+      }
     </p>
     <p class="center">
-      <button onClick=${redo} type="button" title="refresh">⭮</button>
+      <button onClick=${redo} type="button" title="refresh"><span class="mdi mdi-reload"/></button>
     </p>
   </div>
   <div class="box">
@@ -658,13 +677,13 @@ function vecToCss (rgb) {
   return '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 }
 
-const closestColor = (r, g, b, nolimit=false) => {
-  const COLORS = [...CLRS_COUNTS.keys()].filter(rgb => state.BLACK ? true : vecToCss(rgb) !== '#000000')
+const closestColor = (r, g, b, noLimit=false) => {
+  const COLORS = [...COLORS_COUNTS.keys()].filter(rgb => state.BLACK ? true : vecToCss(rgb) !== '#000000')
   let closestMatch = COLORS[0]
   let minDiff = Infinity
 
   for (let color of COLORS) {
-    if (state.LIMIT === true && !nolimit && state.COUNTS.get(color) >= CLRS_COUNTS.get(color)) {
+    if (state.LIMIT === true && !noLimit && state.COUNTS.get(color) >= COLORS_COUNTS.get(color)) {
       continue
     }
     const [rr, gg, bb] = color
@@ -674,7 +693,7 @@ const closestColor = (r, g, b, nolimit=false) => {
       minDiff = diff
     }
   }
-  if (!nolimit) { // increment
+  if (!noLimit) { // increment
     state.COUNTS.set(closestMatch, state.COUNTS.get(closestMatch)+1)
   }
 
@@ -684,12 +703,13 @@ const closestColor = (r, g, b, nolimit=false) => {
 const Palette = () => {
   return html`
     <code>
-    ${[...CLRS_COUNTS.entries()]
+    ${[...COLORS_COUNTS.entries()]
       .filter(([color]) => state.BLACK ? true : vecToCss(color) !== '#000000')
       .map(([color, count], i) => (
         html`
-          ${"➊➋➌➍➎➏➐➑➒➓⬤".split('')[i]} <b style="color: ${vecToCss(color)}">⬤ </b>
-          ${vecToCss(color)}:\t${count}\t- ${state.COUNTS.get(color)}\t=
+          <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
+          <b style="color: ${vecToCss(color)}"> <span class="mdi mdi-circle" /> </b>
+          ${vecToCss(color)}:\t${count}\t- ${state.COUNTS.get(color)}${` = `}
           <span style="color: ${(count - state.COUNTS.get(color)) < 0 ? 'red' : 'inherit'}">
             ${count - state.COUNTS.get(color)}
           </span>
