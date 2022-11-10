@@ -167,6 +167,49 @@ const rand = (n) =>  Math.floor(Math.random()*n)
 const range = (n) => Array.from({ length: n }).map((_, i) => i)
 const clamp = (min, max, val) => Math.max(min, Math.min(max, val))
 
+const rgbToCss = (rgb) => (
+  '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('')
+)
+
+const cssToRgb = (color) => {
+  const [_, r, g, b] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/)
+    .map((xx) => parseInt(xx, 16) ) || []
+  return [r, g, b] // [0-255, 0-255, 0-255]
+}
+
+const rgbToHsl = ([r, g, b]) => {
+  r /= 255
+  g /= 255
+  b /= 255
+  const cmax = Math.max(r, g, b)
+  const cmin = Math.min(r, g, b)
+  const delta = cmax - cmin
+  const l = (cmax + cmin)/2
+  const s = delta && delta / (1 - Math.abs(2*l - 1))
+  let h = delta && (({
+    [r]: (g - b)/delta + 0,
+    [g]: (b - r)/delta + 2,
+    [b]: (r - g)/delta + 4,
+  }[cmax] * 60 + 360) % 360)
+  return [h, s, l] // [0-360, 0-1, 0-1]
+}
+
+const HslToRgb = ([h, s, l]) => {
+  const c = (1 - Math.abs(2*l - 1)) * s
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = l - c/2
+  const [r, g, b] = ([
+    [c, x, 0],
+    [x, c, 0],
+    [0, c, x],
+    [0, x, c],
+    [x, 0, c],
+    [c, 0, x],
+  ][Math.floor(h / 60)])
+    .map(c => Math.round((c + m) * 255))
+  return [r, g, b]
+}
+
 const COLORS_COUNTS = Object.entries({
   "#ffffff": 3064, // White
   "#0f355a": 393, // Dark Blue
@@ -183,7 +226,7 @@ const COLORS_COUNTS = Object.entries({
 
   '#000000': Infinity,
 }).reduce((map, [color, count]) => {
-  map.set(cssToVec(color), count)
+  map.set(cssToRgb(color), count)
   return  map
 }, new Map)
 
@@ -206,6 +249,7 @@ const MATCHING_PRESET = {
   CHESS: true,
   DIFFUSION: true,
   BRIGHTNESS: 0,
+
   CONTRAST: 0.125,
   NOISE: 0.125
 }
@@ -231,6 +275,7 @@ const defaultState = {
     CONTRAST: (rand(4)+4)/16,
     BLACK: !rand(2),
     NOISE: rand(4) * 1/16,
+    HUE: (rand(5)-2) * 15,
     CROP: true,
     SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
     COUNTS: [...COLORS_COUNTS.keys()]
@@ -256,7 +301,7 @@ const App = () => {
           return map
       }, new Map()),
     }
-    const data = getDataFromImg(image, newState) // this is instance of Image
+    const data = getDataFromImg(image, newState)
     setState({ ...newState, data })
   }
 
@@ -294,7 +339,7 @@ const Svgs = ({data, width: W, height: H}) => {
       width=${W}
       height=${H}
       zoomBlock=${{x, y}}
-      setZoomBlock=${({x, y}) => { setZoomBlock({x, y}) }}
+      setZoomBlock=${setZoomBlock}
     />
   `
 }
@@ -310,7 +355,7 @@ const ZoomBlock = ({data}) => {
         const y = (i - x)/S
         return html`
           <circle
-            fill=${vecToCss(rgb)}
+            fill=${rgbToCss(rgb)}
             cx=${x*Z * ZZ + Z/2 * ZZ}
             cy=${y*Z * ZZ + Z/2 * ZZ}
             r=${0.5 * Z * ZZ}
@@ -355,7 +400,7 @@ const Board = ({data, width: W, height: H, zoomBlock, setZoomBlock}) => {
         const y = (i - x)/W
         return html`
           <circle
-            fill=${vecToCss(rgb)}
+            fill=${rgbToCss(rgb)}
             cx=${x*Z + Z/2}
             cy=${y*Z + Z/2}
             r=${0.5 * Z}
@@ -450,6 +495,7 @@ const Boxes = (state) => {
         <span class="mdi mdi-lightbulb-on-${Math.round((state.BRIGHTNESS + 0.5) * 8 + 1)*10}" />
         <input id="brightness" type="range" min="-0.5" max="0.5" step="0.025"
           value=${state.BRIGHTNESS}
+          title=${`${Math.round(state.BRIGHTNESS * 100)}%`}
           onChange=${(e) => { set({BRIGHTNESS: +e.target.value}) }}
         />
         <button class="close" type="button" onClick=${() => { set({BRIGHTNESS: 0})}} title="default brightness">
@@ -462,9 +508,22 @@ const Boxes = (state) => {
         <span class="mdi mdi-contrast-circle" />
         <input id="contrast" type="range" min="-0.5" max="0.5" step="0.025"
           value=${state.CONTRAST}
+          title=${`${Math.round(state.CONTRAST * 100)}%`}
           onChange=${(e) => { set({CONTRAST: +e.target.value}) }}
         />
         <button class="close" type="button" onClick=${() => { set({CONTRAST: 0})}}  title="default contrast">
+          <span class="mdi small mdi-close"/>
+        </button>
+      </label>
+      <label>Hue shift
+        <br/>
+        <span class="mdi mdi-palette" />
+        <input id="hue" type="range" min="-150" max="150" step="15"
+          value=${state.HUE}
+          title=${`${state.HUE}°`}
+          onChange=${(e) => { set({HUE: +e.target.value}) }}
+        />
+        <button class="close" type="button" onClick=${() => { set({HUE: 0})}}  title="default hue">
           <span class="mdi small mdi-close"/>
         </button>
       </label>
@@ -538,7 +597,8 @@ const Boxes = (state) => {
               noise
               <br />
               <span class="mdi mdi-snowflake"/>
-              <input type="range" min="0" max="1" step="0.0625"
+              <input type="range" min="0" max="1" step=${1/32}
+                title=${`${Math.round(state.NOISE * 100)}%`}
                 onChange=${(e) => {set({NOISE: +e.target.value})}} value=${state.NOISE}
               />
             </label>
@@ -565,12 +625,12 @@ const Palette = (state) => {
   return html`
     <code>
     ${[...COLORS_COUNTS.entries()]
-      .filter(([color]) => state.BLACK || vecToCss(color) !== '#000000')
+      .filter(([color]) => state.BLACK || rgbToCss(color) !== '#000000')
       .map(([color, count], i) => (
         html`
           <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
-          <b style="color: ${vecToCss(color)}"> <span class="mdi mdi-circle" /> </b>
-          ${vecToCss(color)}:\t${formatNumber(count)}\t- ${formatNumber(state.COUNTS.get(color))}${` = `}
+          <b style="color: ${rgbToCss(color)}"> <span class="mdi mdi-circle" /> </b>
+          ${rgbToCss(color)}:\t${formatNumber(count)}\t- ${formatNumber(state.COUNTS.get(color))}${` = `}
           <span style="color: ${(count - state.COUNTS.get(color)) < 0 ? 'red' : 'inherit'}">
             ${formatNumber(count - state.COUNTS.get(color))}
           </span>
@@ -616,7 +676,7 @@ const getDataFromImg = function(image, state) {
   ctx.drawImage(image, srcX, srcY, srcW, srcH, 0, 0, W, H)
   const imageData = ctx.getImageData(0, 0, W, H)
 
-  // apply brightness and contrast
+  // apply brightness and contrast and hue shift
   {
     const src = imageData.data
     const dest = imageData.data
@@ -624,7 +684,12 @@ const getDataFromImg = function(image, state) {
     const factor = (state.CONTRAST + 1) / (1 - state.CONTRAST)
     for (let i = 0; i < src.length; i += 4) {
       let [r, g, b] = [src[i+0], src[i+1], src[i+2]]
-      // let grey = weight.r*r + weight.g*g + weight.b*b
+
+      if (state.HUE) {
+        const [h,s,l] = rgbToHsl([r, g, b])
+        ;[r, g, b] = HslToRgb([(h + state.HUE + 360) % 360, s, l])
+      }
+
       r = factor * (r-128) + 128
       g = factor * (g-128) + 128
       b = factor * (b-128) + 128
@@ -652,7 +717,7 @@ const getDataFromImg = function(image, state) {
     const ditheredData = new ImageData(W, H)
 
     const availableColors = [...COLORS_COUNTS.keys()]
-      .filter(rgb => state.BLACK || vecToCss(rgb) !== '#000000')
+      .filter(rgb => state.BLACK || rgbToCss(rgb) !== '#000000')
     errorBuffer = dithering(imageData, ditheredData, filter, availableColors, 1)
   }
   const bytes = imageData.data
@@ -708,7 +773,7 @@ const getDataFromImg = function(image, state) {
       b += errorBuffer[i][2]
     }
     const availableColors = [...COLORS_COUNTS.keys()]
-      .filter(rgb => state.BLACK || vecToCss(rgb) !== '#000000')
+      .filter(rgb => state.BLACK || rgbToCss(rgb) !== '#000000')
       .filter(rgb => !state.LIMIT || state.COUNTS.get(rgb) < COLORS_COUNTS.get(rgb))
     const clr = result[i] = closestColor(r, g, b, availableColors)
 
@@ -720,14 +785,6 @@ const getDataFromImg = function(image, state) {
   return result
 }
 
-function cssToVec (color) {
-  const [_, r, g, b] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/)
-    .map((xx) => parseInt(xx, 16) ) || []
-  return [r, g, b]
-}
-function vecToCss (rgb) {
-  return '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('')
-}
 
 const closestColor = (r, g, b, availableColors) => {
   let closestMatch = availableColors[0]
