@@ -292,11 +292,16 @@ const ZoomBlock = ({data}) => {
   `
 }
 
-const Board = ({data, width: W, height: H, setZoomBlock}) => {
+const Board = ({data, width: W, height: H, zoomBlock, setZoomBlock}) => {
   const [zoom, setZoom] = useState({x:0, y:0})
-  const onMouseOverlay = (x, y) => {
+  const onMouseEnter = (x, y) => {
+    setZoomBlock({x, y})
+  }
+  const onMouseLeave = (x, y) => {
+    setZoomBlock(zoom)
+  }
+  const onMouseClick = (x, y) => {
     setZoom({x, y})
-    setZoomBlock(x, y)
   }
   return html`
     <svg id="svg" xmlns="http://www.w3.org/2000/svg"
@@ -332,12 +337,14 @@ const Board = ({data, width: W, height: H, setZoomBlock}) => {
       range(H/S).map(y => range(W/S).map(x => ( // overlay tiles
         html`
           <rect
-            class='overlay ${zoom.x === x && zoom.y === y ? 'selected' : ''}'
+            class='overlay ${zoomBlock.x === x && zoomBlock.y === y ? 'selected' : ''}'
             x=${x*Z*S}
             y=${y*Z*S}
             width=${S * Z}
             height=${S * Z}
-            onmouseenter=${() => onMouseOverlay(x, y)}
+            onmouseenter=${() => onMouseEnter(x, y)}
+            onClick=${() => onMouseClick(x, y)}
+            onmouseleave=${() => onMouseLeave(x, y)}
           />
         `
       )))
@@ -543,7 +550,8 @@ const Svgs = ({data, width: W, height: H}) => {
       data=${data}
       width=${W}
       height=${H}
-      setZoomBlock=${(x, y) => { setZoomBlock({x, y}) }}
+      zoomBlock=${{x, y}}
+      setZoomBlock=${({x, y}) => { setZoomBlock({x, y}) }}
     />
   `
 }
