@@ -14,7 +14,7 @@ body {
 }
 div.boxes, div.svgs {
   display: flex;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   justify-content: center;
   align-items: center;
 }
@@ -23,7 +23,6 @@ div.svgs {
 }
 
 svg {
-  background-color: #111;
   margin: 0.5rem;
   max-height: calc(100vh - 2rem);
   max-width: calc(100vw - 2rem);
@@ -71,29 +70,29 @@ canvas {
   border: 1px solid #ddd;
 }
 
-rect {
-  fill: none;
+#board rect {
   stroke: red;
   stroke-width: 0.5px;
   stroke-dasharray: 1;
 }
-rect.overlay {
+#board rect.overlay {
   visibility: hidden;
 }
-svg:hover rect.overlay {
+#board:hover rect.overlay {
   visibility: visible;
   fill: rgba(127, 127,127, 0.5);
 }
-svg rect.overlay:hover{
+#board rect.overlay:hover{
   fill: rgba(255, 255,255, 0);
 }
-svg:hover ~ svg rect.overlay {
+svg:hover ~ #board rect.overlay {
   fill: rgba(127, 127,127, 0.75);
   visibility: visible;
 }
-svg:hover ~ svg rect.overlay.selected {
+svg:hover ~ #board rect.overlay.selected {
   fill: rgba(255, 255,255, 0);
 }
+
 label {
   position: relative;
   cursor: pointer;
@@ -105,9 +104,7 @@ label > * {
 }
 label.image-selector {
   position: absolute;
-  top: 1rem; left: 0; right: 0; bottom: 0;
-  width: 100%;
-  height: 100%;
+  top: 5rem; left: 0; right: 0; bottom: 5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -154,6 +151,12 @@ footer a {
   }
   svg:nth-child(1) {
     /* position: relative; */
+  }
+}
+
+@media print {
+  div.boxes {
+    display: none;
   }
 }
 </style>
@@ -210,26 +213,56 @@ const HslToRgb = ([h, s, l]) => {
   return [r, g, b]
 }
 
-const COLORS_COUNTS = Object.entries({
+const getQuery = (key) => (
+  window.location.search.substr(1).split('&')
+    .reduce((obj, s) => {
+      const [key, ...rest] = s.split('=')
+      return {
+        ...obj,
+        [key]: rest.join('='),
+      }
+    }, {})[key]
+)
+
+const COLORS_COUNTS = Object.entries(!getQuery("ldraw") ? {
+  // colors from the build pdf booklet - https://www.lego.com/cdn/product-assets/product.bi.core.pdf/6372756.pdf
   "#ffffff": 3064, // White
   "#0f355a": 393, // Dark Blue
 
-  "#44b7d1": 1607, // Medium Azure (light blue)
-  "#339a95": 1879, // Dark Turquoise (dark blue)
-  "#32a237": 601, // Bright Green  (dark green)
-  "#a4c518": 1060, // Bright Yellowish green (light green)
+  "#44b7d1": 1607, // Medium Azure (ws light blue)
+  "#339a95": 1879, // Dark Turquoise (ws dark blue)
+  "#32a237": 601, // Bright Green  (ws dark green)
+  "#a4c518": 1060, // Bright Yellowish green (ws light green)
 
   "#dfc991": 725, // Tan
   "#f1ad1a": 599, // Bright Light Orange
   "#e57619": 601, // Orange
   "#e46c72": 601, // Coral
 
-  '#000000': Infinity,
+  '#000000': Infinity, // Black
+} : {
+  // LDRAW colors - https://www.ldraw.org/article/547.html
+  "#F4F4F4": 3064, // White
+  "#19325A": 393, // (Dark_Blue) Earth blue
+
+  "#68C3E2": 1607, // Medium_Azure
+  "#069D9F": 1879, // (Dark_Turquoise) Bright Bluish Green
+  "#58AB41": 601, // Bright_Green  
+  "#A5CA18": 1060, // (Lime) Bright Yellowish green
+
+  "#B0A06F": 725, // (Tan) Brick Yellow
+  "#FCAC00": 599, // (Bright_Light_Orange) Flame Yellowish Orange
+  "#D67923": 601, // Orange (Bright Orange)
+  "#FF6D77": 601, // Coral
+
+  '#1B2A34': Infinity // Black
 }).reduce((map, [color, count]) => {
   map.set(cssToRgb(color), count)
   return  map
 }, new Map)
 
+const WHITE = [...(COLORS_COUNTS.keys())][0]
+const BLACK = [...(COLORS_COUNTS.keys())].pop()
 
 const Z = 9 // dot size
 const ZZ = 5 // zoom of dot in zoomed block
@@ -263,9 +296,7 @@ const COLORFUL_PRESET = {
   NOISE: 0.0625
 }
 
-const defaultImg = location.search.substr(1).split('&')
-  .filter(s => s.startsWith('img=')).pop()?.substring('img='.length) ||
-  `./images/face (${Math.floor(Math.random()*12)+1}).jpg`
+const defaultImg = getQuery("img") || `./images/face (${Math.floor(Math.random()*12)+1}).jpg`
 
 const defaultState = {
     W: _W, H: _H,
@@ -283,7 +314,7 @@ const defaultState = {
         map.set(rgb, 0)
         return map
     }, new Map()),
-    data: range(_W*_H).map(() => [0,0,0]),
+    data: range(_W*_H).map(() => BLACK),
   }
 
 
@@ -346,20 +377,66 @@ const Svgs = ({data, width: W, height: H}) => {
 
 const ZoomBlock = ({data}) => {
   return html`
-    <svg id="svg" xmlns="http://www.w3.org/2000/svg"
+    <svg xmlns="http://www.w3.org/2000/svg"
+      fill=${rgbToCss(BLACK)}
       width=${S * Z * ZZ} height=${S * Z * ZZ} viewBox="0 0 ${S * Z * ZZ} ${S * Z * ZZ}"
     >
     ${
       data.map((rgb, i) => {
         const x = i % S
         const y = (i - x)/S
+        const isBoard = String(rgb) === String(BLACK)
+        const doStud = isBoard || String(rgb) === String(WHITE)
+        const doHollowStud = isBoard && (
+          (x == 0 || x == S-1) && (y >= 2 && y <= S - 3) ||
+          (y == 0 || y == S-1) && (x >= 2 && x <= S - 3)
+        )
+        const side = Z * ZZ
         return html`
-          <circle
-            fill=${rgbToCss(rgb)}
-            cx=${x*Z * ZZ + Z/2 * ZZ}
-            cy=${y*Z * ZZ + Z/2 * ZZ}
-            r=${0.5 * Z * ZZ}
+          <rect
+            x=${x*side}
+            y=${y*side}
+            width=${side}
+            height=${side}
           />
+          ${
+            !isBoard && html`
+              <circle
+                fill=${rgbToCss(rgb)}
+                cx=${x*side + side/2}
+                cy=${y*side + side/2}
+                r=${side/2}
+              />
+            `
+          }
+          ${
+            // stud is 12/20 of 1x1 circle
+            doStud && html`
+              <circle
+                fill=${rgbToCss(rgb)}
+                stroke=${`#77777777`}
+                stroke-width=${1}
+                transpa
+                cx=${x*side + side/2}
+                cy=${y*side + side/2}
+                r=${side/2 * 12/20}
+              />
+            `
+          }
+          ${
+            // stud hole is 8/20 of 1x1 circle
+            doHollowStud && html`
+              <circle
+                fill=${rgbToCss(rgb)}
+                stroke=${`#77777777`}
+                stroke-width=${1}
+                transpa
+                cx=${x*Z * ZZ + Z/2 * ZZ}
+                cy=${y*Z * ZZ + Z/2 * ZZ}
+                r=${0.5 * Z * ZZ * 8/20}
+              />
+            `
+          }
         `
       })
     }
@@ -379,7 +456,8 @@ const Board = ({data, width: W, height: H, zoomBlock, setZoomBlock}) => {
     setZoom({x, y})
   }
   return html`
-    <svg id="svg" xmlns="http://www.w3.org/2000/svg"
+    <svg id="board" xmlns="http://www.w3.org/2000/svg"
+      fill=${rgbToCss(BLACK)}
       width=${W * Z} height=${H * Z} viewBox="0 0 ${W * Z} ${H * Z}"
     >
     ${
@@ -625,7 +703,7 @@ const Palette = (state) => {
   return html`
     <code>
     ${[...COLORS_COUNTS.entries()]
-      .filter(([color]) => state.BLACK || rgbToCss(color) !== '#000000')
+      .filter(([color]) => state.BLACK || String(color) !== String(BLACK))
       .map(([color, count], i) => (
         html`
           <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
@@ -717,7 +795,7 @@ const getDataFromImg = function(image, state) {
     const ditheredData = new ImageData(W, H)
 
     const availableColors = [...COLORS_COUNTS.keys()]
-      .filter(rgb => state.BLACK || rgbToCss(rgb) !== '#000000')
+      .filter(rgb => state.BLACK || String(rgb) !== String(BLACK))
     errorBuffer = dithering(imageData, ditheredData, filter, availableColors, 1)
   }
   const bytes = imageData.data
@@ -773,7 +851,7 @@ const getDataFromImg = function(image, state) {
       b += errorBuffer[i][2]
     }
     const availableColors = [...COLORS_COUNTS.keys()]
-      .filter(rgb => state.BLACK || rgbToCss(rgb) !== '#000000')
+      .filter(rgb => state.BLACK || String(rgb) !== String(BLACK))
       .filter(rgb => !state.LIMIT || state.COUNTS.get(rgb) < COLORS_COUNTS.get(rgb))
     const clr = result[i] = closestColor(r, g, b, availableColors)
 
@@ -815,7 +893,7 @@ function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
 
   // init error buffer
   for(let i = 0; i < errBuff.length; i++) {
-    errBuff[i] = [0,0,0]
+    errBuff[i] = [...BLACK]
   }
 
   for(let i = 0; i < src.length; i += 4) {
