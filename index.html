@@ -54,6 +54,10 @@ div.box {
   background-color: #eee;
 }
 
+code {
+  white-space: nowrap;
+}
+
 .box:first-child p:last-child {
   position: absolute;
   bottom: 0;
@@ -116,7 +120,7 @@ p>span {
   display: block;
   margin: 0.25rem 1.5rem;
 }
-p.center {
+.center {
   text-align: center;
 }
 
@@ -154,14 +158,14 @@ footer a {
 }
 </style>
 </head> 
-<body class="landscape">
-<div class="svgs">
-</div>
-<div class="boxes">
+<body>
 
-</div>
 <script>
 const { html, render, Component, useState } = htmPreact
+
+const rand = (n) =>  Math.floor(Math.random()*n)
+const range = (n) => Array.from({ length: n }).map((_, i) => i)
+const clamp = (min, max, val) => Math.max(min, Math.min(max, val))
 
 const COLORS_COUNTS = Object.entries({
   "#ffffff": 3064, // White
@@ -183,19 +187,18 @@ const COLORS_COUNTS = Object.entries({
   return  map
 }, new Map)
 
-const rand = (n) =>  Math.floor(Math.random()*n)
-const range = (n) => Array.from({ length: n }).map((_, i) => i)
 
 const Z = 9
 const ZZ = 5
 const S = 16
 
-let W = 128
-let H = 80
+const _W = 128 // default weight
+const _H = 80 // default height
 
 // refs
 let cn  // canvas
 let fileInput // file input
+const image = new Image() // Image instance
 
 const MATCHING_PRESET = {
   LIMIT: true,
@@ -216,44 +219,54 @@ const COLORFUL_PRESET = {
   NOISE: 0.0625
 }
 
-let state = {
-  // ...MATCHING_PRESET,
-  ...COLORFUL_PRESET,
-  BRIGHTNESS: (rand(8)-2)/16,
-  CONTRAST: (rand(4)+4)/16,
-  BLACK: !rand(2),
-  NOISE: rand(4) * 1/16,
-  CROP: true,
-  SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
-  COUNTS: [...COLORS_COUNTS.keys()]
-    .reduce((map, rgb) => {
-      map.set(rgb, 0)
-      return map
-  }, new Map()),
-  data: range(W*H).map(() => [0,0,0]),
-}
-
-const redo = function (e) {
-  const portrait = (W < H)
-  // document.body.classList[portrait ? 'add' : 'remove']('portrait')
-  // document.body.classList[portrait ? 'remove' : 'add']('landscape')
-
-  render(html`<${Boxes} />`, document.querySelector('.boxes'))
-
-  const files = e?.target.files || fileInput?.files || []
-  if (files.length < 1) {
-    const image = new Image()
-    image.onload = onImageLoad
-    image.src = defaultImg
-    return
+const defaultState = {
+    W: _W, H: _H,
+    // ...MATCHING_PRESET,
+    ...COLORFUL_PRESET,
+    BRIGHTNESS: (rand(8)-2)/16,
+    CONTRAST: (rand(4)+4)/16,
+    BLACK: !rand(2),
+    NOISE: rand(4) * 1/16,
+    CROP: true,
+    SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
+    COUNTS: [...COLORS_COUNTS.keys()]
+      .reduce((map, rgb) => {
+        map.set(rgb, 0)
+        return map
+    }, new Map()),
+    data: range(_W*_H).map(() => [0,0,0]),
   }
-  let reader = new FileReader()
-  reader.onload = (e) => {
-    let image = new Image()
-    image.onload = onImageLoad
-    image.src = e.target.result
+
+
+const App = () => {
+  const [ state, setState ] = useState(defaultState)
+
+
+  const set = (change) => {
+    const newState = {
+      ...state,
+      ...change,
+        // reset counts
+      COUNTS: [...COLORS_COUNTS.keys()]
+        .reduce((map, rgb) => {
+          map.set(rgb, 0)
+          return map
+      }, new Map()),
+    }
+    const data = getDataFromImg(image, newState) // this is instance of Image
+    setState({ ...newState, data })
   }
-  reader.readAsDataURL(files[0])
+
+  return html`
+    <div>
+      <div class="svgs">
+        <${Svgs} data=${state.data} width=${state.W} height=${state.H} />
+      </div>
+      <div class="boxes">
+        <${Boxes} width=${state.W} height=${state.H} ...${state} set=${set} />
+      </div>
+    </div>
+  `
 }
 
 const ZoomBlock = ({data}) => {
@@ -290,7 +303,7 @@ const Board = ({data, width: W, height: H, setZoomBlock}) => {
       width=${W * Z} height=${H * Z} viewBox="0 0 ${W * Z} ${H * Z}"
     >
     ${
-      range(H/S).map(y => range(W/S).map(x => ( // TODO use data
+      range(H/S).map(y => range(W/S).map(x => ( // background tiles
         html`
           <rect
             x=${x*Z*S}
@@ -316,7 +329,7 @@ const Board = ({data, width: W, height: H, setZoomBlock}) => {
       })
     }
     ${
-      range(H/S).map(y => range(W/S).map(x => (
+      range(H/S).map(y => range(W/S).map(x => ( // overlay tiles
         html`
           <rect
             class='overlay ${zoom.x === x && zoom.y === y ? 'selected' : ''}'
@@ -333,23 +346,31 @@ const Board = ({data, width: W, height: H, setZoomBlock}) => {
   `
 }
 
-const Boxes = () => {
-  const onFileChange = redo;
-  const preset = (variant) => {
-    if (variant === 'default') {
-      state = {
-        ...state,
-        ...MATCHING_PRESET,
-      }
-    }
-    if (variant === 'colorful') {
-      state = {
-        ...state,
-        ...COLORFUL_PRESET,
-      }
-    }
-    redo()
+const Boxes = (state) => {
+  const {
+    width: W,
+    height: H,
+    set,
+  } = state
+  
+  const reRender = () => {
+    set({})
   }
+  image.onload = reRender
+
+  const onFileChange = function (e) {
+    const files = e?.target.files || fileInput?.files || []
+    if (files.length < 1) {
+      image.src = defaultImg
+      return
+    }
+    let reader = new FileReader()
+    reader.onload = (e) => {
+      image.src = e.target.result
+    }
+    reader.readAsDataURL(files[0])
+  }
+
   return html`
   <div class="box">
     <p>
@@ -360,8 +381,7 @@ const Boxes = () => {
     <p>
       <label class="image-selector">
         <input type="file" id="fileinput" hidden onChange=${onFileChange} ref=${ref => {fileInput = ref}} />
-        <canvas id="canvas" height=${H} width=${W} ref=${ref => {cn = ref}}>
-        </canvas>
+        <canvas id="canvas" ref=${ref => {cn = ref}} />
         <button type="button" onClick=${() => fileInput.click()}>
           <b><span class="mdi mdi-folder-image"/> open image</b>
         </button>
@@ -369,18 +389,11 @@ const Boxes = () => {
     </p>
     <p class="center">
       <br/>
-      ${W < H && (
-        html`<button onClick=${() => {[W,H] = [128, 80]; redo()}} type="button">
-          <span class="mdi mdi-phone-rotate-landscape"/> landscape
-        </button>`
-      )}
-      ${W > H && (
-        html`<button onClick=${() => {[W,H] = [80, 128]; redo()}} type="button">
-          <span class="mdi mdi-phone-rotate-portrait"/> portrait
-        </button>`
-      )}
+      <button onClick=${() => { set({W: H, H: W})}} type="button">
+        <span class="mdi mdi-phone-rotate-${ W < H ? 'landscape' : 'portrait'}"/> ${W < H ? 'landscape' : 'portrait'}
+      </button>
       <br/>
-      <button onClick=${() => {state.CROP = !state.CROP; redo()}} type="button">
+      <button onClick=${() => { set({CROP: !state.CROP}) }} type="button">
         <span class="mdi mdi-${state.CROP ? 'stretch-to-page-outline' : 'content-cut'}" />
         ${state.CROP ? ' stretch' : ' crop'}
       </button>
@@ -389,9 +402,9 @@ const Boxes = () => {
   <div class="box">
     <p>
       presets:${' '}
-      <a href="javascript:void" onClick=${() => preset('colorful')}>colorful</a>
+      <a href="javascript:void" onClick=${() => set(COLORFUL_PRESET)}>colorful</a>
       ${' '}
-      <a href="javascript:void" onClick=${() => preset('default')}>matching</a>
+      <a href="javascript:void" onClick=${() => set(MATCHING_PRESET)}>matching</a>
     </p>
     <p class="center">
       <br/>
@@ -400,9 +413,9 @@ const Boxes = () => {
         <span class="mdi mdi-lightbulb-on-${Math.round((state.BRIGHTNESS + 0.5) * 8 + 1)*10}" />
         <input id="brightness" type="range" min="-0.5" max="0.5" step="0.025"
           value=${state.BRIGHTNESS}
-          onChange=${(e) => { state.BRIGHTNESS = +e.target.value; redo() }}
+          onChange=${(e) => { set({BRIGHTNESS: +e.target.value}) }}
         />
-        <button class="close" type="button" onClick=${() => { state.BRIGHTNESS = 0; redo()}} title="default brightness">
+        <button class="close" type="button" onClick=${() => { set({BRIGHTNESS: 0})}} title="default brightness">
           <span class="mdi small mdi-close"/>
         </button>
       </label>
@@ -412,9 +425,9 @@ const Boxes = () => {
         <span class="mdi mdi-contrast-circle" />
         <input id="contrast" type="range" min="-0.5" max="0.5" step="0.025"
           value=${state.CONTRAST}
-          onChange=${(e) => {state.CONTRAST = +e.target.value; redo() }}
+          onChange=${(e) => { set({CONTRAST: +e.target.value}) }}
         />
-        <button class="close" type="button" onClick=${() => { state.CONTRAST = 0; redo()}}  title="default contrast">
+        <button class="close" type="button" onClick=${() => { set({CONTRAST: 0})}}  title="default contrast">
           <span class="mdi small mdi-close"/>
         </button>
       </label>
@@ -424,7 +437,7 @@ const Boxes = () => {
     <p>
       <label>
         <input type="checkbox" name="black"
-          onChange=${(e) => {state.BLACK = e.target.checked; redo()}} checked=${state.BLACK}
+          onChange=${(e) => {set({BLACK: e.target.checked})}} checked=${state.BLACK}
         />
         allow black
       </label>
@@ -432,14 +445,14 @@ const Boxes = () => {
     <p>
       <label title="apply error diffusion">
         <input type="checkbox" name="diffusion"
-          onChange=${(e) => {state.DIFFUSION = e.target.checked; redo()}} checked=${state.DIFFUSION}
+          onChange=${(e) => {set({DIFFUSION: e.target.checked})}} checked=${state.DIFFUSION}
         />
         dithering <span class="mdi mdi-gradient-vertical"/>
       </label>
     </p>
     <p>
       <input type="checkbox" id="limit" name="limit"
-        onChange=${(e) => {state.LIMIT = !e.target.checked; redo()}} checked=${!state.LIMIT}
+        onChange=${(e) => {set({LIMIT: !e.target.checked})}} checked=${!state.LIMIT}
       />
       <label for="limit" title="use more pieces than in the set">
         unlimited pieces
@@ -450,28 +463,28 @@ const Boxes = () => {
             spread${' '}
             <label title="radial spread">
               <button type="button" title="radial"
-                onClick=${() => { state.SPREAD = 'radial'; redo()}} disabled=${state.SPREAD === 'radial'}
+                onClick=${() => { set({SPREAD: 'radial'})}} disabled=${state.SPREAD === 'radial'}
               >
                 <span class="mdi mdi-circle-slice-8"/>
               </button>
             </label>
             <label title="squared spread">
               <button type="button" title="squared"
-                onClick=${() => { state.SPREAD = 'squared'; redo()}} disabled=${state.SPREAD === 'squared'}
+                onClick=${() => { set({SPREAD: 'squared'})}} disabled=${state.SPREAD === 'squared'}
               >
                 <span class="mdi mdi-checkbox-intermediate"/>
               </button>
             </label>
             <label title="horizontal spread">
               <button type="button" title="horizontal"
-                onClick=${() => { state.SPREAD = 'horizontal'; redo()}} disabled=${state.SPREAD === 'horizontal'}
+                onClick=${() => { set({SPREAD: 'horizontal'})}} disabled=${state.SPREAD === 'horizontal'}
               >
                 <span class="mdi mdi-view-day mdi-rotate-90"/>
               </button>
             </label>
             <label title="vertical spread">
               <button type="button" title="vertical"
-                onClick=${() => { state.SPREAD = 'vertical'; redo()}} disabled=${state.SPREAD === 'vertical'}
+                onClick=${() => { set({SPREAD: 'vertical'})}} disabled=${state.SPREAD === 'vertical'}
               >
                 <span class="mdi mdi-view-day"/>
               </button>
@@ -479,7 +492,7 @@ const Boxes = () => {
             <br/>
             <label title="checker patter">
               <input type="checkbox" name="chess"
-                onChange=${() => {state.CHESS = !state.CHESS; redo()}} checked=${state.CHESS}
+                onChange=${() => {set({CHESS: !state.CHESS})}} checked=${state.CHESS}
               />
               double pass <span class="mdi mdi-checkerboard"/>
             </label>
@@ -489,7 +502,7 @@ const Boxes = () => {
               <br />
               <span class="mdi mdi-snowflake"/>
               <input type="range" min="0" max="1" step="0.0625"
-                onChange=${(e) => {state.NOISE = +e.target.value; redo()}} value=${state.NOISE}
+                onChange=${(e) => {set({NOISE: +e.target.value})}} value=${state.NOISE}
               />
             </label>
           </span>`
@@ -497,11 +510,11 @@ const Boxes = () => {
       }
     </p>
     <p class="center">
-      <button onClick=${redo} type="button" title="refresh"><span class="mdi mdi-reload"/></button>
+      <button onClick=${reRender} type="button" title="refresh"><span class="mdi mdi-reload"/></button>
     </p>
   </div>
   <div class="box">
-    <${Palette} />
+    <${Palette} ...${state} />
     <footer>
       © <a target="_blank" href="https://draho.cz">draho.cz</a>
     </footer>
@@ -509,34 +522,34 @@ const Boxes = () => {
   `
 }
 
-class Svgs extends Component {
-  state = {
-    zoomBlock: {x: 0, y: 0},
-  }
+const Svgs = ({data, width: W, height: H}) => {
+  const [ {x, y}, setZoomBlock ] = useState({x: 0, y: 0})
 
-  render({data}, { zoomBlock: {x, y} }) {
-    const xStart = x * S
-    const yStart = y * S
-    const zoomData = []
-    for(let yy = 0; yy < S; yy++) {
-      for(let xx = 0; xx <  S; xx++) {
-        const sourceI = (yStart + yy) * W + (xStart+ xx)
+  const xStart = x * S
+  const yStart = y * S
+  const zoomData = []
+  for(let yy = 0; yy < S; yy++) {
+    for(let xx = 0; xx <  S; xx++) {
+      const sourceI = (yStart + yy) * W + (xStart+ xx)
+      if (sourceI < data.length) { // can be out when changing orientation
         zoomData.push(data[sourceI])
       }
     }
-    return html`
-      <${ZoomBlock} data=${zoomData} />
-      <${Board}
-        data=${data}
-        width=${W}
-        height=${H}
-        setZoomBlock=${(x, y) => { this.setState({ zoomBlock: {x, y} }) }}
-      />
-    `
   }
+
+  return html`
+    <${ZoomBlock} data=${zoomData} />
+    <${Board}
+      data=${data}
+      width=${W}
+      height=${H}
+      setZoomBlock=${(x, y) => { setZoomBlock({x, y}) }}
+    />
+  `
 }
 
-const Palette = () => {
+const Palette = (state) => {
+  const formatNumber = (n) => Number.isFinite(n) ? Intl.NumberFormat().format(n) : '∞'
   return html`
     <code>
     ${[...COLORS_COUNTS.entries()]
@@ -545,9 +558,9 @@ const Palette = () => {
         html`
           <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
           <b style="color: ${vecToCss(color)}"> <span class="mdi mdi-circle" /> </b>
-          ${vecToCss(color)}:\t${count}\t- ${state.COUNTS.get(color)}${` = `}
+          ${vecToCss(color)}:\t${formatNumber(count)}\t- ${formatNumber(state.COUNTS.get(color))}${` = `}
           <span style="color: ${(count - state.COUNTS.get(color)) < 0 ? 'red' : 'inherit'}">
-            ${count - state.COUNTS.get(color)}
+            ${formatNumber(count - state.COUNTS.get(color))}
           </span>
           <br />
         `
@@ -557,24 +570,27 @@ const Palette = () => {
   `
 }
 
-const onImageLoad = function() {
+const getDataFromImg = function(image, state) {
+  const { W, H } = state
   if (!cn) {
-    return
+    console.warn("Canvas ref not ready")
+    return state.data
   }
-  const ctx = cn.getContext("2d", { willReadFrequently: true })
-  // reset counts
-  state.COUNTS.forEach((count, rgb, map) => {
-    map.set(rgb, 0)
-  })
-
+  if (!image.complete) {
+    console.warn("Image bot loaded yet")
+    return state.data
+  }
+  
   cn.width = W
   cn.height = H
 
+  const ctx = cn.getContext("2d", {  })
+  
   let srcX = 0, srcY = 0
-  let srcW = this.width, srcH = this.height
+  let srcW = image.width, srcH = image.height
 
   if (state.CROP) {
-    let ratio_ratio = (this.width / this.height) / (W / H)
+    let ratio_ratio = (image.width / image.height) / (W / H)
     if (ratio_ratio > 1) { // crop sides
       let diff = srcW - (srcW / ratio_ratio)
       srcW -= diff
@@ -585,7 +601,7 @@ const onImageLoad = function() {
       srcY += diff/2
     }
   }
-  ctx.drawImage(this, srcX, srcY, srcW, srcH, 0, 0, W, H)
+  ctx.drawImage(image, srcX, srcY, srcW, srcH, 0, 0, W, H)
   const imageData = ctx.getImageData(0, 0, W, H)
 
   // apply brightness and contrast
@@ -623,7 +639,9 @@ const onImageLoad = function() {
     ]
     const ditheredData = new ImageData(W, H)
 
-    errorBuffer = dithering(imageData, ditheredData, () => null, filter, 1)
+    const availableColors = [...COLORS_COUNTS.keys()]
+      .filter(rgb => state.BLACK || vecToCss(rgb) !== '#000000')
+    errorBuffer = dithering(imageData, ditheredData, () => null, filter, availableColors, 1)
   }
   const bytes = imageData.data
 
@@ -671,7 +689,7 @@ const onImageLoad = function() {
   }
 
   const indexes = order.map(({i}) => i)
-  let data = []
+  let result = []
   for(let i of indexes) {
     let [r, g, b] = [bytes[i*4+0], bytes[i*4+1], bytes[i*4+2]]
     if (errorBuffer) {
@@ -679,33 +697,33 @@ const onImageLoad = function() {
       g += errorBuffer[i][1]
       b += errorBuffer[i][2]
     }
-    data[i] = closestColor(r, g, b)
+    const availableColors = [...COLORS_COUNTS.keys()]
+      .filter(rgb => state.BLACK || vecToCss(rgb) !== '#000000')
+      .filter(rgb => !state.LIMIT || state.COUNTS.get(rgb) < COLORS_COUNTS.get(rgb))
+    const clr = result[i] = closestColor(r, g, b, availableColors)
+
+    if (limit) { // increment
+      state.COUNTS.set(clr, state.COUNTS.get(clr)+1)
+    }
   }
 
-  state.data = data
-
-  render(html`<${Svgs} data=${state.data} />`, document.querySelector('.svgs'))
-  render(html`<${Boxes} />`, document.querySelector('.boxes')) // needed to udpate palette
-
+  return result
 }
 
 function cssToVec (color) {
-  const [_, r, g, b] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/).map((xx) => parseInt(xx, 16) ) || []
+  const [_, r, g, b] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/)
+    .map((xx) => parseInt(xx, 16) ) || []
   return [r, g, b]
 }
 function vecToCss (rgb) {
   return '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 }
 
-const closestColor = (r, g, b, noLimit=false) => {
-  const COLORS = [...COLORS_COUNTS.keys()].filter(rgb => state.BLACK ? true : vecToCss(rgb) !== '#000000')
-  let closestMatch = COLORS[0]
+const closestColor = (r, g, b, availableColors) => {
+  let closestMatch = availableColors[0]
   let minDiff = Infinity
 
-  for (let color of COLORS) {
-    if (state.LIMIT === true && !noLimit && state.COUNTS.get(color) >= COLORS_COUNTS.get(color)) {
-      continue
-    }
+  for (let color of availableColors) {
     const [rr, gg, bb] = color
     const diff = Math.sqrt((r - rr)**2 + (g - gg)**2 + (b - bb)**2)
     if (diff < minDiff) {
@@ -713,20 +731,16 @@ const closestColor = (r, g, b, noLimit=false) => {
       minDiff = diff
     }
   }
-  if (!noLimit) { // increment
-    state.COUNTS.set(closestMatch, state.COUNTS.get(closestMatch)+1)
-  }
 
   return closestMatch
 }
 
-function dithering(srcData, destData, getThreshold, filter=[[0]], range=1) {
+function dithering(srcData, destData, getThreshold, filter=[[0]], availableColors, range=1) {
 	const src = srcData.data
 	const dest = destData.data
 	const errBuff = Array(dest.length/4) // array of 3vec
 	const width = srcData.width
 	const height = srcData.height
-	const B = 0, W = 255
 
 	const [fox, foy] = [-Math.floor(filter.length/2), -Math.floor(filter[0].length/2)] // filter center offset
 	const weightSum = filter.reduce((sum, line) => sum + line.reduce((sum, w) => sum+w, 0), 0)
@@ -745,7 +759,7 @@ function dithering(srcData, destData, getThreshold, filter=[[0]], range=1) {
     const g = clamp(-Infinity, +Infinity, src[i+1] + errBuff[i/4][1])
     const b = clamp(-Infinity, +Infinity, src[i+2] + errBuff[i/4][2])
 
-		const [_r, _g, _b] = closestColor(r, g, b, true)
+		const [_r, _g, _b] = closestColor(r, g, b, availableColors)
 		dest[i+0] = _r
 		dest[i+1] = _g
 		dest[i+2] = _b
@@ -768,28 +782,21 @@ function dithering(srcData, destData, getThreshold, filter=[[0]], range=1) {
 			}
 		}
 	}
-  state.COUNTS.forEach((count, rgb, map) => {
-    map.set(rgb, 0)
-  })
-  return errBuff
-}
 
-function clamp(min, max, val) {
-	return Math.max(min, Math.min(max, val))
+  return errBuff
 }
 
 const defaultImg = location.search.substr(1).split('&')
   .filter(s => s.startsWith('img=')).pop()?.substring('img='.length) ||
   `./images/face (${Math.floor(Math.random()*12)+1}).jpg`
 
-if (window.location.protocol !== 'file:') {
-  const image = new Image()
-  image.onload = onImageLoad
-  image.src = defaultImg
-}
+render(html`<${App} />`, document.body)
 
-render(html`<${Svgs} data=${state.data} />`, document.querySelector('.svgs'))
-redo()
+setTimeout(() => {
+  if (window.location.protocol !== 'file:') {
+    image.src = defaultImg
+  }
+})
 
 </script>
 </body>
