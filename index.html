@@ -188,11 +188,11 @@ const COLORS_COUNTS = Object.entries({
 }, new Map)
 
 
-const Z = 9
-const ZZ = 5
-const S = 16
+const Z = 9 // dot size
+const ZZ = 5 // zoom of dot in zoomed block
+const S = 16 // zoomed block size
 
-const _W = 128 // default weight
+const _W = 128 // default width
 const _H = 80 // default height
 
 // refs
@@ -219,6 +219,10 @@ const COLORFUL_PRESET = {
   NOISE: 0.0625
 }
 
+const defaultImg = location.search.substr(1).split('&')
+  .filter(s => s.startsWith('img=')).pop()?.substring('img='.length) ||
+  `./images/face (${Math.floor(Math.random()*12)+1}).jpg`
+
 const defaultState = {
     W: _W, H: _H,
     // ...MATCHING_PRESET,
@@ -240,7 +244,6 @@ const defaultState = {
 
 const App = () => {
   const [ state, setState ] = useState(defaultState)
-
 
   const set = (change) => {
     const newState = {
@@ -266,6 +269,33 @@ const App = () => {
         <${Boxes} width=${state.W} height=${state.H} ...${state} set=${set} />
       </div>
     </div>
+  `
+}
+
+const Svgs = ({data, width: W, height: H}) => {
+  const [ {x, y}, setZoomBlock ] = useState({x: 0, y: 0})
+
+  const xStart = x * S
+  const yStart = y * S
+  const zoomData = []
+  for(let yy = 0; yy < S; yy++) {
+    for(let xx = 0; xx <  S; xx++) {
+      const sourceI = (yStart + yy) * W + (xStart+ xx)
+      if (sourceI < data.length) { // can be out when changing orientation
+        zoomData.push(data[sourceI])
+      }
+    }
+  }
+
+  return html`
+    <${ZoomBlock} data=${zoomData} />
+    <${Board}
+      data=${data}
+      width=${W}
+      height=${H}
+      zoomBlock=${{x, y}}
+      setZoomBlock=${({x, y}) => { setZoomBlock({x, y}) }}
+    />
   `
 }
 
@@ -529,39 +559,13 @@ const Boxes = (state) => {
   `
 }
 
-const Svgs = ({data, width: W, height: H}) => {
-  const [ {x, y}, setZoomBlock ] = useState({x: 0, y: 0})
-
-  const xStart = x * S
-  const yStart = y * S
-  const zoomData = []
-  for(let yy = 0; yy < S; yy++) {
-    for(let xx = 0; xx <  S; xx++) {
-      const sourceI = (yStart + yy) * W + (xStart+ xx)
-      if (sourceI < data.length) { // can be out when changing orientation
-        zoomData.push(data[sourceI])
-      }
-    }
-  }
-
-  return html`
-    <${ZoomBlock} data=${zoomData} />
-    <${Board}
-      data=${data}
-      width=${W}
-      height=${H}
-      zoomBlock=${{x, y}}
-      setZoomBlock=${({x, y}) => { setZoomBlock({x, y}) }}
-    />
-  `
-}
 
 const Palette = (state) => {
   const formatNumber = (n) => Number.isFinite(n) ? Intl.NumberFormat().format(n) : '∞'
   return html`
     <code>
     ${[...COLORS_COUNTS.entries()]
-      .filter(([color]) => state.BLACK ? true : vecToCss(color) !== '#000000')
+      .filter(([color]) => state.BLACK || vecToCss(color) !== '#000000')
       .map(([color, count], i) => (
         html`
           <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
@@ -585,14 +589,14 @@ const getDataFromImg = function(image, state) {
     return state.data
   }
   if (!image.complete) {
-    console.warn("Image bot loaded yet")
+    console.warn("Image not loaded yet")
     return state.data
   }
   
   cn.width = W
   cn.height = H
 
-  const ctx = cn.getContext("2d", {  })
+  const ctx = cn.getContext("2d", { willReadFrequently: true })
   
   let srcX = 0, srcY = 0
   let srcW = image.width, srcH = image.height
@@ -603,7 +607,7 @@ const getDataFromImg = function(image, state) {
       let diff = srcW - (srcW / ratio_ratio)
       srcW -= diff
       srcX += diff/2
-    } else { // crop tob / bottom
+    } else { // crop top / bottom
       let diff = srcH - (srcH * ratio_ratio)
       srcH -= diff
       srcY += diff/2
@@ -649,11 +653,9 @@ const getDataFromImg = function(image, state) {
 
     const availableColors = [...COLORS_COUNTS.keys()]
       .filter(rgb => state.BLACK || vecToCss(rgb) !== '#000000')
-    errorBuffer = dithering(imageData, ditheredData, () => null, filter, availableColors, 1)
+    errorBuffer = dithering(imageData, ditheredData, filter, availableColors, 1)
   }
   const bytes = imageData.data
-
-  const circles = document.querySelectorAll('#svg circle')
 
   let order = []
   for(let i = 0, y = 0; y < H; y++) {
@@ -743,60 +745,56 @@ const closestColor = (r, g, b, availableColors) => {
   return closestMatch
 }
 
-function dithering(srcData, destData, getThreshold, filter=[[0]], availableColors, range=1) {
-	const src = srcData.data
-	const dest = destData.data
-	const errBuff = Array(dest.length/4) // array of 3vec
-	const width = srcData.width
-	const height = srcData.height
+function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
+  const src = srcData.data
+  const dest = destData.data
+  const errBuff = Array(dest.length/4) // array of 3vec
+  const width = srcData.width
+  const height = srcData.height
 
-	const [fox, foy] = [-Math.floor(filter.length/2), -Math.floor(filter[0].length/2)] // filter center offset
-	const weightSum = filter.reduce((sum, line) => sum + line.reduce((sum, w) => sum+w, 0), 0)
-	const spread = range/weightSum
+  const [fox, foy] = [-Math.floor(filter.length/2), -Math.floor(filter[0].length/2)] // filter center offset
+  const weightSum = filter.reduce((sum, line) => sum + line.reduce((sum, w) => sum+w, 0), 0)
+  const spread = range/weightSum
 
-	// init error buffer
-	for(let i = 0; i < errBuff.length; i++) {
-		errBuff[i] = [0,0,0]
-	}
+  // init error buffer
+  for(let i = 0; i < errBuff.length; i++) {
+    errBuff[i] = [0,0,0]
+  }
 
-	for(let i = 0; i < src.length; i += 4) {
-		const x = i/4 % width
-		const y = (i/4 - x) / width
+  for(let i = 0; i < src.length; i += 4) {
+    const x = i/4 % width
+    const y = (i/4 - x) / width
 
-		const r = clamp(-Infinity, +Infinity, src[i+0] + errBuff[i/4][0]) // clr
+    const r = clamp(-Infinity, +Infinity, src[i+0] + errBuff[i/4][0]) // clr
     const g = clamp(-Infinity, +Infinity, src[i+1] + errBuff[i/4][1])
     const b = clamp(-Infinity, +Infinity, src[i+2] + errBuff[i/4][2])
 
-		const [_r, _g, _b] = closestColor(r, g, b, availableColors)
-		dest[i+0] = _r
-		dest[i+1] = _g
-		dest[i+2] = _b
-		const err = [r - _r, g - _g, b - _b]
-		// distribute error:
-		for(let j = -foy; j < filter.length; j++) {
-			for(let i = 0; i < filter[j].length; i++) {
-				const weight = filter[j][i]
-				if(!weight) {
-					continue
-				}
-				const xi = x+i+fox
-				const yi = y+j+foy
-				if(xi < 0 || xi >= width || yi < 0 || yi >= height) {
-					continue
-				}
-				errBuff[xi + yi*width][0] += err[0]*weight*spread
+    const [_r, _g, _b] = closestColor(r, g, b, availableColors)
+    dest[i+0] = _r
+    dest[i+1] = _g
+    dest[i+2] = _b
+    const err = [r - _r, g - _g, b - _b]
+    // distribute error:
+    for(let j = -foy; j < filter.length; j++) {
+      for(let i = 0; i < filter[j].length; i++) {
+        const weight = filter[j][i]
+        if(!weight) {
+          continue
+        }
+        const xi = x+i+fox
+        const yi = y+j+foy
+        if(xi < 0 || xi >= width || yi < 0 || yi >= height) {
+          continue
+        }
+        errBuff[xi + yi*width][0] += err[0]*weight*spread
         errBuff[xi + yi*width][1] += err[1]*weight*spread
-				errBuff[xi + yi*width][2] += err[2]*weight*spread
-			}
-		}
-	}
+        errBuff[xi + yi*width][2] += err[2]*weight*spread
+      }
+    }
+  }
 
   return errBuff
 }
-
-const defaultImg = location.search.substr(1).split('&')
-  .filter(s => s.startsWith('img=')).pop()?.substring('img='.length) ||
-  `./images/face (${Math.floor(Math.random()*12)+1}).jpg`
 
 render(html`<${App} />`, document.body)
 
