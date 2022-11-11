@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Document</title>
+<title>Brix - a Lego Mosaic Maker</title>
 <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css"></style>
 <script src="https://unpkg.com/htm/preact/standalone.umd.js"></script>
 <style>
@@ -24,7 +24,7 @@ div.svgs {
 
 svg {
   margin: 0.5rem;
-  max-height: calc(100vh - 2rem);
+  max-height: min(calc(100vh - 2rem), 720px);
   max-width: calc(100vw - 2rem);
   border: 0.5rem solid #ddd;
   border-radius: 0.5rem;
@@ -164,7 +164,7 @@ footer a {
 <body>
 
 <script>
-const { html, render, Component, useState } = htmPreact
+const { html, render, useState } = htmPreact
 
 const rand = (n) =>  Math.floor(Math.random()*n)
 const range = (n) => Array.from({ length: n }).map((_, i) => i)
@@ -176,7 +176,7 @@ const rgbToCss = (rgb) => (
 
 const cssToRgb = (color) => {
   const [_, r, g, b] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/)
-    .map((xx) => parseInt(xx, 16) ) || []
+    .map((xx) => parseInt(xx, 16) ) || [0,0,0]
   return [r, g, b] // [0-255, 0-255, 0-255]
 }
 
@@ -189,7 +189,7 @@ const rgbToHsl = ([r, g, b]) => {
   const delta = cmax - cmin
   const l = (cmax + cmin)/2
   const s = delta && delta / (1 - Math.abs(2*l - 1))
-  let h = delta && (({
+  const h = delta && (({
     [r]: (g - b)/delta + 0,
     [g]: (b - r)/delta + 2,
     [b]: (r - g)/delta + 4,
@@ -524,7 +524,7 @@ const Boxes = (state) => {
       image.src = defaultImg
       return
     }
-    let reader = new FileReader()
+    const reader = new FileReader()
     reader.onload = (e) => {
       image.src = e.target.result
     }
@@ -534,7 +534,9 @@ const Boxes = (state) => {
   return html`
   <div class="box">
     <p>
-      <b>Custom image generator <span class="mdi mdi-earth" /><span class="mdi mdi-arrow-right" /><span class="mdi mdi-file-image" /></b>
+      <span>
+        <b>Br</b>icks rem<b>ix</b> <span class="mdi mdi-earth" /><span class="mdi mdi-arrow-right" /><span class="mdi mdi-file-image" />
+      </span>
       <br/>
       for LEGO World Map <a target="_blank" href="https://www.lego.com/en-us/product/world-map-31203"> set 31203</a>
     </p>
@@ -736,11 +738,11 @@ const getDataFromImg = function(image, state) {
 
   const ctx = cn.getContext("2d", { willReadFrequently: true })
   
-  let srcX = 0, srcY = 0
+  let  srcX = 0, srcY = 0
   let srcW = image.width, srcH = image.height
 
   if (state.CROP) {
-    let ratio_ratio = (image.width / image.height) / (W / H)
+    const ratio_ratio = (image.width / image.height) / (W / H)
     if (ratio_ratio > 1) { // crop sides
       let diff = srcW - (srcW / ratio_ratio)
       srcW -= diff
@@ -829,8 +831,8 @@ const getDataFromImg = function(image, state) {
   order = order.sort((a, b) => delta(a) - delta(b) + state.NOISE * maxdelta * (Math.random() - 0.5))
 
   if (state.CHESS) {
-    let even = []
-    let odd = []
+    const even = []
+    const odd = []
     for (let item of order) {
       if((item.x + item.y)%2 ) {
         even.push(item)
@@ -842,7 +844,7 @@ const getDataFromImg = function(image, state) {
   }
 
   const indexes = order.map(({i}) => i)
-  let result = []
+  const result = []
   for(let i of indexes) {
     let [r, g, b] = [bytes[i*4+0], bytes[i*4+1], bytes[i*4+2]]
     if (errorBuffer) {
