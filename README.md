@@ -1,4 +1,7 @@
-# lego-mosaic-maker
-Generates alternative mosaic build for lego World Map (set 31203)
+# Brix
 
-[drahoslove.github.io/lego-mosaic-maker/](//drahoslove.github.io/lego-mosaic-maker/)
+### A lego mosaic maker
+
+Generates an alternative mosaic build from the lego World Map set (31203)
+
+[brix.draho.cz](https://brix.draho.cz/)
