@@ -113,7 +113,7 @@ label.image-selector {
 button.close {
   padding: 0;
 }
-p>span {
+span.block {
   display: block;
   margin: 0.25rem 1.5rem;
 }
@@ -532,13 +532,15 @@ const Boxes = (state) => {
   }
 
   return html`
-  <div class="box">
+  <div class="box center">
     <p>
       <span>
         <b>Br</b>icks rem<b>ix</b> <span class="mdi mdi-earth" /><span class="mdi mdi-arrow-right" /><span class="mdi mdi-file-image" />
       </span>
       <br/>
-      for LEGO World Map <a target="_blank" href="https://www.lego.com/en-us/product/world-map-31203"> set 31203</a>
+      <span>
+        for LEGO World Map <a target="_blank" href="https://www.lego.com/en-us/product/world-map-31203"> set 31203</a>
+      </span>
     </p>
     <p>
       <label class="image-selector">
@@ -635,7 +637,7 @@ const Boxes = (state) => {
       </label>
       ${
         state.LIMIT && (
-          html`<span>
+          html`<span class="block">
             spread${' '}
             <label title="radial spread">
               <button type="button" title="radial"
