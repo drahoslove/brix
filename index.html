@@ -942,9 +942,9 @@ function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
     const x = i/4 % width
     const y = (i/4 - x) / width
 
-    const r = clamp(-Infinity, +Infinity, src[i+0] + errBuff[i/4][0]) // clr
-    const g = clamp(-Infinity, +Infinity, src[i+1] + errBuff[i/4][1])
-    const b = clamp(-Infinity, +Infinity, src[i+2] + errBuff[i/4][2])
+    const r = clamp(0, 255, src[i+0] + errBuff[i/4][0]) // clr
+    const g = clamp(0, 255, src[i+1] + errBuff[i/4][1])
+    const b = clamp(0, 255, src[i+2] + errBuff[i/4][2])
 
     const [[_r, _g, _b], err] = closestColor(r, g, b, availableColors)
     dest[i+0] = _r
