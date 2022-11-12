@@ -5,10 +5,12 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Brix - a Lego Mosaic Maker</title>
+<meta name="description" content="Use this tool to generate a mosaic remix of the Lego Map set">
 <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css"></style>
 <script src="https://unpkg.com/htm/preact/standalone.umd.js"></script>
 <style>
 body {
+  background-color: #b3b5bc;
   margin: 0;
   font-family:Arial, Helvetica, sans-serif
 }
@@ -26,10 +28,9 @@ svg {
   margin: 0.5rem;
   max-height: min(calc(100vh - 2rem), 720px);
   max-width: calc(100vw - 2rem);
-  border: 0.5rem solid #ddd;
-  border-radius: 0.5rem;
   width: auto;
   height: auto;
+  box-shadow: 1px 1px 3px #3339, 2px 2px 5px #3339, 3px 3px 7px #3339;
 }
 
 div.boxes {
@@ -51,6 +52,7 @@ div.box {
   padding: 1rem;
   border-radius: 1rem;
   background-color: #eee;
+  box-shadow: 1px 1px 3px #3333
 }
 
 code {
@@ -66,6 +68,10 @@ code {
 }
 
 canvas {
+  max-width: 128px;
+  max-height: 128px;
+  width: auto;
+  height: auto;
   image-rendering: pixelated;
   border: 1px solid #ddd;
 }
@@ -128,7 +134,7 @@ footer {
   color: #999;
 }
 a {
-  color: #777;
+  color: #666;
 }
 footer a {
   color: #999;
@@ -162,7 +168,6 @@ footer a {
 </style>
 </head> 
 <body>
-
 <script>
 const { html, render, useState } = htmPreact
 
@@ -312,7 +317,7 @@ const COLORFUL_PRESET = {
   NOISE: 0.0625,
 }
 
-const defaultImg = getQuery("img") || `./images/face (${Math.floor(Math.random()*12)+1}).jpg`
+const defaultImg = getQuery("img") || `./images/face (${Math.floor(Math.random()*12)+1}).webp`
 
 const defaultState = {
     W: _W, H: _H,
