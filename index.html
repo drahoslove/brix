@@ -282,18 +282,18 @@ const MATCHING_PRESET = {
   CHESS: true,
   DIFFUSION: true,
   BRIGHTNESS: 0,
-
-  CONTRAST: 0.125,
-  NOISE: 0.125
+  CONTRAST: 0,
+  HUE: 0,
+  NOISE: 0.125,
 }
 const COLORFUL_PRESET = {
   LIMIT: true,
   BLACK: false,
   CHESS: false,
   DIFFUSION: false,
-  BRIGHTNESS: 0.25,
-  CONTRAST: 0.5,
-  NOISE: 0.0625
+  BRIGHTNESS: 0,
+  CONTRAST: 0.25,
+  NOISE: 0.0625,
 }
 
 const defaultImg = getQuery("img") || `./images/face (${Math.floor(Math.random()*12)+1}).jpg`
@@ -857,7 +857,8 @@ const getDataFromImg = function(image, state) {
     const availableColors = [...COLORS_COUNTS.keys()]
       .filter(rgb => state.BLACK || String(rgb) !== String(BLACK))
       .filter(rgb => !state.LIMIT || state.COUNTS.get(rgb) < COLORS_COUNTS.get(rgb))
-    const clr = result[i] = closestColor(r, g, b, availableColors)
+    const [clr] = closestColor(r, g, b, availableColors)
+    result[i] = clr
 
     if (limit) { // increment
       state.COUNTS.set(clr, state.COUNTS.get(clr)+1)
@@ -868,20 +869,57 @@ const getDataFromImg = function(image, state) {
 }
 
 
+const memoized = (func) => {
+  const cache = new Map()
+  return (arg) => {
+    let res = cache.get(arg)
+    if (res) {
+      return res
+    } else {
+      result = func(arg)
+      cache.set(arg, result)
+      return result
+    }
+  }
+}
+
+
+// adjust for the blackness of the background
+// (round tiles makes only pi/4 of the square area)
+// const adjustForRoundTiles_ = memoized(([r,g,b]) => {
+//   const quadPI = Math.PI/4
+//   r = r * quadPI + (BLACK[0]/255 * (1-quadPI))
+//   g = g * quadPI + (BLACK[1]/255 * (1-quadPI))
+//   b = b * quadPI + (BLACK[2]/255 * (1-quadPI))
+//   return [r, g, b]
+// })
+
+const adjustForRoundTiles = memoized((rgb) => {
+  let [h, s, l] = rgbToHsl(rgb)
+  let [,, bl] = rgbToHsl(BLACK)
+  const quadPI = Math.PI/4
+  const STRENGTH = 0.8
+  const ratio = quadPI + (1-quadPI) * (1-STRENGTH)
+  const lightness = l * ratio + bl * (1-ratio)
+  return HslToRgb([h, s, lightness])
+})
+
 const closestColor = (r, g, b, availableColors) => {
   let closestMatch = availableColors[0]
+  let [_rr, _gg, _bb] = [...BLACK]
   let minDiff = Infinity
-
+  
   for (let color of availableColors) {
-    const [rr, gg, bb] = color
+    const [rr, gg, bb] = adjustForRoundTiles(color)
     const diff = Math.sqrt((r - rr)**2 + (g - gg)**2 + (b - bb)**2)
     if (diff < minDiff) {
       closestMatch = color
+      ;[_rr, _gg, _bb] = [rr, gg, bb]
       minDiff = diff
     }
   }
-
-  return closestMatch
+  const err = [r-_rr, g-_gg, b-_bb]
+  return [closestMatch, err]
 }
 
 function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
@@ -908,11 +946,11 @@ function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
     const g = clamp(-Infinity, +Infinity, src[i+1] + errBuff[i/4][1])
     const b = clamp(-Infinity, +Infinity, src[i+2] + errBuff[i/4][2])
 
-    const [_r, _g, _b] = closestColor(r, g, b, availableColors)
+    const [[_r, _g, _b], err] = closestColor(r, g, b, availableColors)
     dest[i+0] = _r
     dest[i+1] = _g
     dest[i+2] = _b
-    const err = [r - _r, g - _g, b - _b]
+    // const err = [r - _r, g - _g, b - _b]
     // distribute error:
     for(let j = -foy; j < filter.length; j++) {
       for(let i = 0; i < filter[j].length; i++) {
