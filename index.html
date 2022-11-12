@@ -224,39 +224,55 @@ const getQuery = (key) => (
     }, {})[key]
 )
 
-const COLORS_COUNTS = Object.entries(!getQuery("ldraw") ? {
-  // colors from the build pdf booklet - https://www.lego.com/cdn/product-assets/product.bi.core.pdf/6372756.pdf
-  "#ffffff": 3064, // White
-  "#0f355a": 393, // Dark Blue
+const COLORS_COUNTS = Object.entries(
+  (getQuery("colors") === 'booklet' && {
+    // colors from the build pdf booklet - https://www.lego.com/cdn/product-assets/product.bi.core.pdf/6372756.pdf
+    "#ffffff": 3064, // White
+    "#0f355a": 393, // Dark Blue
 
-  "#44b7d1": 1607, // Medium Azure (ws light blue)
-  "#339a95": 1879, // Dark Turquoise (ws dark blue)
-  "#32a237": 601, // Bright Green  (ws dark green)
-  "#a4c518": 1060, // Bright Yellowish green (ws light green)
+    "#44b7d1": 1607, // Medium Azure (ws light blue)
+    "#339a95": 1879, // Dark Turquoise (ws dark blue)
+    "#32a237": 601, // Bright Green  (ws dark green)
+    "#a4c518": 1060, // Bright Yellowish green (ws light green)
 
-  "#dfc991": 725, // Tan
-  "#f1ad1a": 599, // Bright Light Orange
-  "#e57619": 601, // Orange
-  "#e46c72": 601, // Coral
+    "#dfc991": 725, // Tan
+    "#f1ad1a": 599, // Bright Light Orange
+    "#e57619": 601, // Orange
+    "#e46c72": 601, // Coral
 
-  '#000000': Infinity, // Black
-} : {
-  // LDRAW colors - https://www.ldraw.org/article/547.html
-  "#F4F4F4": 3064, // White
-  "#19325A": 393, // (Dark_Blue) Earth blue
+    '#000000': Infinity, // Black
+  }) ||
+  (getQuery("colors") === 'ldraw' && {
+    // LDRAW colors - https://www.ldraw.org/article/547.html
+    "#F4F4F4": 3064, // White
+    "#19325A": 393, // (Dark_Blue) Earth blue
 
-  "#68C3E2": 1607, // Medium_Azure
-  "#069D9F": 1879, // (Dark_Turquoise) Bright Bluish Green
-  "#58AB41": 601, // Bright_Green  
-  "#A5CA18": 1060, // (Lime) Bright Yellowish green
+    "#68C3E2": 1607, // Medium_Azure
+    "#069D9F": 1879, // (Dark_Turquoise) Bright Bluish Green
+    "#58AB41": 601, // Bright_Green
+    "#A5CA18": 1060, // (Lime) Bright Yellowish green
 
-  "#B0A06F": 725, // (Tan) Brick Yellow
-  "#FCAC00": 599, // (Bright_Light_Orange) Flame Yellowish Orange
-  "#D67923": 601, // Orange (Bright Orange)
-  "#FF6D77": 601, // Coral
+    "#B0A06F": 725, // (Tan) Brick Yellow
+    "#FCAC00": 599, // (Bright_Light_Orange) Flame Yellowish Orange
+    "#D67923": 601, // Orange (Bright Orange)
+    "#FF6D77": 601, // Coral
 
-  '#1B2A34': Infinity // Black
-}).reduce((map, [color, count]) => {
+    '#1B2A34': Infinity // Black
+  }) ||
+  ({ // bricklink colors (default) copied from https://github.com/debkbanerji/lego-art-remix/blob/master/app/js/bricklink-colors.js
+    "#ffffff": 3064,
+    "#143044": 393,
+    "#42c0fb": 1607,
+    "#008a80": 1879,
+    "#10cb31": 601,
+    "#a6ca55": 1060,
+    "#dec69c": 725,
+    "#f7ba30": 599,
+    "#ff7e14": 601,
+    "#f88379": 601,
+    '#000000': Infinity, // Black
+  })
+).reduce((map, [color, count]) => {
   map.set(cssToRgb(color), count)
   return  map
 }, new Map)
