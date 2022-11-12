@@ -873,7 +873,7 @@ const getDataFromImg = function(image, state) {
     const availableColors = [...COLORS_COUNTS.keys()]
       .filter(rgb => state.BLACK || String(rgb) !== String(BLACK))
       .filter(rgb => !state.LIMIT || state.COUNTS.get(rgb) < COLORS_COUNTS.get(rgb))
-    const [clr] = closestColor(r, g, b, availableColors)
+    const [clr] = closestColor([r, g, b], availableColors, state.DIFFUSION ? adjustLightnessForRoundTiles : adjustBrightnessForRoundTiles)
     result[i] = clr
 
     if (limit) { // increment
@@ -900,41 +900,72 @@ const memoized = (func) => {
 }
 
 
+const QUAD_PI = Math.PI/4
+const STRENGTH = Number(getQuery('adj')) || 0.75
+const adjustRatio = QUAD_PI + (1-QUAD_PI) * (1-STRENGTH)
 // adjust for the blackness of the background
 // (round tiles makes only pi/4 of the square area)
-// const adjustForRoundTiles_ = memoized(([r,g,b]) => {
-//   const quadPI = Math.PI/4
-//   r = r * quadPI + (BLACK[0]/255 * (1-quadPI))
-//   g = g * quadPI + (BLACK[1]/255 * (1-quadPI))
-//   b = b * quadPI + (BLACK[2]/255 * (1-quadPI))
-//   return [r, g, b]
-// })
+const adjustBrightnessForRoundTiles = memoized(([r,g,b]) => {
+  r = r * adjustRatio + (BLACK[0]/255 * (1-adjustRatio))
+  g = g * adjustRatio + (BLACK[1]/255 * (1-adjustRatio))
+  b = b * adjustRatio + (BLACK[2]/255 * (1-adjustRatio))
+  return [r, g, b]
+})
 
-const adjustForRoundTiles = memoized((rgb) => {
+// same as adjustBrightnessForRoundTiles, but looks better with dithering
+const adjustLightnessForRoundTiles = memoized((rgb) => {
   let [h, s, l] = rgbToHsl(rgb)
   let [,, bl] = rgbToHsl(BLACK)
-  const quadPI = Math.PI/4
-  const STRENGTH = 0.8
-  const ratio = quadPI + (1-quadPI) * (1-STRENGTH)
-  const lightness = l * ratio + bl * (1-ratio)
+  const lightness = l * adjustRatio + bl * (1-adjustRatio)
   return HslToRgb([h, s, lightness])
 })
 
-const closestColor = (r, g, b, availableColors) => {
+// euclidean distance of two colors in the rgb space
+const rgbDist = ([r, g, b], [rr, gg, bb]) => (
+  Math.sqrt((r - rr)**2 + (g - gg)**2 + (b - bb)**2)
+)
+
+// similar to rgbDist but more sensitive to green
+const redMeanDist = ([r, g, b], [rr, gg, bb]) => {
+  const rm = (r+rr)/2
+  return Math.sqrt(
+    +       (2 + rm/256) * (r - rr)**2
+    +                 4  * (g - gg)**2
+    + (2 + (255-rm)/256) * (b - bb)**2
+  )
+}
+
+const hslDist = (c, cc) => {
+  let [h, s, l] = rgbToHsl(c)
+  let [hh, ss, ll] = rgbToHsl(cc)
+  l *= 2
+  ll *= 2
+  h *= Math.PI/180
+  hh *= Math.PI/180
+  const r = s * (l < 0.5 ? l : 1-l)
+  const rr = ss * (ll < 0.5 ? ll : 1-ll)
+  const x = Math.cos(h) * r
+  const y = Math.sin(h) * r
+  const xx= Math.cos(hh) * rr
+  const yy = Math.sin(hh) * rr
+  return  Math.sqrt((x-xx)**2 + (y-yy)**2 + (l-ll)**2)
+}
+
+const closestColor = ([r, g, b], availableColors, adjustForRoundTiles = x => x) => {
   let closestMatch = availableColors[0]
-  let [_rr, _gg, _bb] = [...BLACK]
-  let minDiff = Infinity
+  let [rr, gg, bb] = [...BLACK]
+  let minDist = Infinity
   
   for (let color of availableColors) {
-    const [rr, gg, bb] = adjustForRoundTiles(color)
-    const diff = Math.sqrt((r - rr)**2 + (g - gg)**2 + (b - bb)**2)
-    if (diff < minDiff) {
+    const clr = adjustForRoundTiles(color)
+    const dist = redMeanDist([r, g, b], clr)
+    if (dist < minDist) {
       closestMatch = color
-      ;[_rr, _gg, _bb] = [rr, gg, bb]
-      minDiff = diff
+      ;[rr, gg, bb] = clr
+      minDist = dist
     }
   }
-  const err = [r-_rr, g-_gg, b-_bb]
+  const err = [r-rr, g-gg, b-bb]
   return [closestMatch, err]
 }
 
@@ -962,7 +993,7 @@ function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
     const g = clamp(0, 255, src[i+1] + errBuff[i/4][1])
     const b = clamp(0, 255, src[i+2] + errBuff[i/4][2])
 
-    const [[_r, _g, _b], err] = closestColor(r, g, b, availableColors)
+    const [[_r, _g, _b], err] = closestColor([r, g, b], availableColors, adjustLightnessForRoundTiles)
     dest[i+0] = _r
     dest[i+1] = _g
     dest[i+2] = _b
