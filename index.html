@@ -13,7 +13,11 @@
 body {
   background-color: #b3b5bc;
   margin: 0;
-  font-family:Arial, Helvetica, sans-serif
+  font-family:Arial, Helvetica, sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  justify-content: space-between;
 }
 div.boxes, div.svgs {
   display: flex;
@@ -128,6 +132,15 @@ span.block {
   text-align: center;
 }
 
+.footerbox {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin: 2rem 0;
+}
 footer {
   position: absolute;
   bottom: 0.5rem;
@@ -139,6 +152,10 @@ a {
 }
 footer a {
   color: #999;
+}
+.footerbox footer,
+.footerbox footer a {
+  color: #555;
 }
 
 .small {
@@ -461,18 +478,21 @@ const App = () => {
   }
 
   return html`
-    <div>
-      <div class="svgs">
-        <${Svgs} data=${state.data} width=${state.W} height=${state.H} />
-      </div>
-      ${
-        !state.NOEDIT && html`
+    <div class="svgs">
+      <${Svgs} data=${state.data} width=${state.W} height=${state.H} />
+    </div>
+    ${
+      !state.NOEDIT
+        ? html`
           <div class="boxes">
             <${Boxes} width=${state.W} height=${state.H} ...${state} set=${set} />
           </div>
         `
-      }
-    </div>
+        : html`
+          <div class="footerbox">
+            <${FooterBox} ...${state} />
+          </div>`
+    }
   `
 }
 
@@ -659,16 +679,6 @@ const Boxes = (state) => {
     reader.readAsDataURL(files[0])
   }
 
-  const shareLink = () => {
-    const url = dataToUrl(state.data, W, H)
-    window.open(url)
-  }
-  const shareQR = () => {
-    const url = dataToUrl(state.data, W, H)
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&qzone=4&margin=20&data=${url}`
-    window.open(qrUrl)
-  }
-
   return html`
   <div class="box center">
     <p>
@@ -831,6 +841,23 @@ const Boxes = (state) => {
     </p>
   </div>
   <div class="box">
+    <${FooterBox} ...${state} />
+  </div>
+  `
+}
+
+const FooterBox = (state) => {
+  const {data, W, H} = state
+  const shareLink = () => {
+    const url = dataToUrl(data, W, H)
+    window.open(url)
+  }
+  const shareQR = () => {
+    const url = dataToUrl(data, W, H)
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&qzone=4&margin=20&data=${url}`
+    window.open(qrUrl)
+  }
+  return html`
     <${Palette} ...${state} />
     <p class="center">
       <button onClick=${shareLink}>
@@ -845,7 +872,6 @@ const Boxes = (state) => {
     <footer>
       © <a target="_blank" href="https://draho.cz">draho.cz</a>
     </footer>
-  </div>
   `
 }
 
