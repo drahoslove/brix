@@ -335,7 +335,7 @@ const dataToUrl = (data, W=W, H=H) => {
   const dataString = bufferToBase64(compressed)
   const query = new URLSearchParams({
     [SHARE_QUERY_KEY]: dataString,
-  }).toString().replace(/%2b/ig, '+').replace(/%2f/ig, '/')
+  }).toString()//.replace(/%2b/ig, '+').replace(/%2f/ig, '/').replace(/%3d/ig,'=')
   return `${window.location.origin}${location.pathname}?${query}`
 }
 
@@ -659,9 +659,14 @@ const Boxes = (state) => {
     reader.readAsDataURL(files[0])
   }
 
-  const share = () => {
+  const shareLink = () => {
     const url = dataToUrl(state.data, W, H)
     window.open(url)
+  }
+  const shareQR = () => {
+    const url = dataToUrl(state.data, W, H)
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&qzone=4&margin=20&data=${url}`
+    window.open(qrUrl)
   }
 
   return html`
@@ -828,9 +833,13 @@ const Boxes = (state) => {
   <div class="box">
     <${Palette} ...${state} />
     <p class="center">
-      <button onClick=${share}>
-        <span class="mdi mdi-share-variant"/>
-        share
+      <button onClick=${shareLink}>
+        <span class="mdi mdi-share-variant"/>${' '}
+        link
+      </button>
+      <button onClick=${shareQR}>
+        <span class="mdi mdi-qrcode-scan"/>${' '}
+        QR
       </button>
     </p>
     <footer>
