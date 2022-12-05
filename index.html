@@ -175,13 +175,14 @@ const rand = (n) =>  Math.floor(Math.random()*n)
 const range = (n) => Array.from({ length: n }).map((_, i) => i)
 const clamp = (min, max, val) => Math.max(min, Math.min(max, val))
 
+
 const rgbToCss = (rgb) => (
   '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 )
 
 const cssToRgb = (color) => {
   const [_, r, g, b] = color?.match(/#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/)
-    .map((xx) => parseInt(xx, 16) ) || [0,0,0]
+    .map((xx) => parseInt(xx, 16) ) || [,0,0,0]
   return [r, g, b] // [0-255, 0-255, 0-255]
 }
 
@@ -218,16 +219,21 @@ const HslToRgb = ([h, s, l]) => {
   return [r, g, b]
 }
 
-const getQuery = (key) => (
-  window.location.search.substr(1).split('&')
+const getQuery = (key) => {
+  const query =  window.location.search
+    .substr(1)
+    .split('&')
     .reduce((obj, s) => {
       const [key, ...rest] = s.split('=')
       return {
         ...obj,
         [key]: rest.join('='),
       }
-    }, {})[key]
-)
+    }, {})
+  return key
+    ? query[key] && decodeURIComponent(query[key])
+    : query
+}
 
 const COLORS_COUNTS = Object.entries(
   (getQuery("colors") === 'booklet' && {
@@ -317,27 +323,61 @@ const COLORFUL_PRESET = {
   NOISE: 0.0625,
 }
 
-const defaultImg = getQuery("img") || `./images/face (${Math.floor(Math.random()*12)+1}).webp`
+const stateToUrl = (state=defaultState) => {
+  const { W, H, CROP} = state
+  const ctx = canvas.getContext('2d')
+  const data = ctx.getImageData(0, 0, W, H) // save current canvas data
+  drawImageToCanvas(image, ctx, W, H, CROP) // render raw image
+  const img = canvas.toDataURL('image/png') // get its url
+  ctx.putImageData(data, 0, 0) // put the canvas data back
+
+  const query = new URLSearchParams(
+    Object.entries(state).reduce((obj, [key, val]) => (
+      (val && !['set','data', 'COUNTS'].includes(key))
+        ? {
+          [key]: typeof val === 'string' ? val : Number(val),
+          ...obj,
+        }
+        : obj
+    ), {img})
+  )
+  return `${window.location.origin}${location.pathname}?${query}`
+}
+
+const urlToState = () => {
+  const query = getQuery()
+  return Object.entries(query).reduce((obj, [key, val]) => {
+    const numVal = Number(val)
+    return (val && !['img'].includes(key) )
+      ? {
+        [key]: isNaN(numVal) ? val : numVal,
+        ...obj,
+      }
+      : obj
+  }, {})
+}
 
 const defaultState = {
-    W: _W, H: _H,
-    // ...MATCHING_PRESET,
-    ...COLORFUL_PRESET,
-    BRIGHTNESS: (rand(8)-2)/16,
-    CONTRAST: (rand(4)+4)/16,
-    BLACK: !rand(2),
-    NOISE: rand(4) * 1/16,
-    HUE: (rand(5)-2) * 15,
-    CROP: true,
-    SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
-    COUNTS: [...COLORS_COUNTS.keys()]
-      .reduce((map, rgb) => {
-        map.set(rgb, 0)
-        return map
-    }, new Map()),
-    data: range(_W*_H).map(() => BLACK),
-  }
+  W: _W, H: _H,
+  // ...MATCHING_PRESET,
+  ...COLORFUL_PRESET,
+  BRIGHTNESS: (rand(8)-2)/16,
+  CONTRAST: (rand(4)+4)/16,
+  BLACK: !rand(2),
+  NOISE: rand(4) * 1/16,
+  HUE: (rand(5)-2) * 15,
+  CROP: true,
+  SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
+  COUNTS: [...COLORS_COUNTS.keys()]
+    .reduce((map, rgb) => {
+      map.set(rgb, 0)
+      return map
+  }, new Map()),
+  data: range(_W*_H).map(() => BLACK),
+  ...urlToState(),
+}
 
+const defaultImg = getQuery("img") || `./images/face (${rand(12)+1}).webp`
 
 const App = () => {
   const [ state, setState ] = useState(defaultState)
@@ -552,6 +592,12 @@ const Boxes = (state) => {
     reader.readAsDataURL(files[0])
   }
 
+  const share = () => {
+    const url = stateToUrl(state)
+    prompt('copy this', url)
+    // window.location = url
+  }
+
   return html`
   <div class="box center">
     <p>
@@ -715,6 +761,12 @@ const Boxes = (state) => {
   </div>
   <div class="box">
     <${Palette} ...${state} />
+    <p class="center">
+      <button onClick=${share}>
+        <span class="mdi mdi-share-variant"/>
+        share
+      </button>
+    </p>
     <footer>
       © <a target="_blank" href="https://draho.cz">draho.cz</a>
     </footer>
@@ -745,26 +797,11 @@ const Palette = (state) => {
   `
 }
 
-const getDataFromImg = function(image, state) {
-  const { W, H } = state
-  if (!cn) {
-    console.warn("Canvas ref not ready")
-    return state.data
-  }
-  if (!image.complete) {
-    console.warn("Image not loaded yet")
-    return state.data
-  }
-  
-  cn.width = W
-  cn.height = H
-
-  const ctx = cn.getContext("2d", { willReadFrequently: true })
-  
-  let  srcX = 0, srcY = 0
+const drawImageToCanvas = (image, ctx, W, H, CROP) => {
+  let srcX = 0, srcY = 0
   let srcW = image.width, srcH = image.height
 
-  if (state.CROP) {
+  if (CROP) {
     const ratio_ratio = (image.width / image.height) / (W / H)
     if (ratio_ratio > 1) { // crop sides
       let diff = srcW - (srcW / ratio_ratio)
@@ -777,6 +814,26 @@ const getDataFromImg = function(image, state) {
     }
   }
   ctx.drawImage(image, srcX, srcY, srcW, srcH, 0, 0, W, H)
+}
+
+const getDataFromImg = function(image, state) {
+  const { W, H } = state
+  
+  if (!cn) {
+    throw Error("Canvas ref not ready")
+    return state.data
+  }
+  if (!image.complete) {
+    throw Error("Image not loaded yet")
+    return state.data
+  }
+  cn.width = W
+  cn.height = H
+
+  const ctx = cn.getContext("2d", { willReadFrequently: true })
+
+  drawImageToCanvas(image, ctx, W, H, state.CROP)
+  
   const imageData = ctx.getImageData(0, 0, W, H)
 
   // apply brightness and contrast and hue shift
@@ -1028,7 +1085,8 @@ function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
 render(html`<${App} />`, document.body)
 
 setTimeout(() => {
-  if (window.location.protocol !== 'file:') {
+  console.log('defaultImgae', defaultImg)
+  if (!(window.location.protocol === 'file:' && defaultImg.includes('.'))) {
     image.src = defaultImg
   }
 })
