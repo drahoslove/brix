@@ -7,6 +7,7 @@
 <title>Brix - a Lego Mosaic Maker</title>
 <meta name="description" content="Use this tool to generate a mosaic remix of the Lego Map set">
 <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css"></style>
+<script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
 <script src="https://unpkg.com/htm/preact/standalone.umd.js"></script>
 <style>
 body {
@@ -174,10 +175,12 @@ const { html, render, useState } = htmPreact
 const rand = (n) =>  Math.floor(Math.random()*n)
 const range = (n) => Array.from({ length: n }).map((_, i) => i)
 const clamp = (min, max, val) => Math.max(min, Math.min(max, val))
+const bufferToBase64 = (bytes) => btoa(String.fromCharCode(...bytes))
+const base64ToBuffer = (str) => Uint8Array.from(atob(str), c => c.charCodeAt(0))
 
 
 const rgbToCss = (rgb) => (
-  '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('')
+  '#' + rgb.map(c => (c < 16 ? '0' : '') + c.toString(16)).join('').toLowerCase()
 )
 
 const cssToRgb = (color) => {
@@ -185,6 +188,8 @@ const cssToRgb = (color) => {
     .map((xx) => parseInt(xx, 16) ) || [,0,0,0]
   return [r, g, b] // [0-255, 0-255, 0-255]
 }
+
+const sameRgb = ([r,g,b], [rr,gg,bb]) => r === rr && g === gg && b === bb
 
 const rgbToHsl = ([r, g, b]) => {
   r /= 255
@@ -303,6 +308,98 @@ let cn  // canvas
 let fileInput // file input
 const image = new Image() // Image instance
 
+const indexOfColor = (color) => (
+  [...COLORS_COUNTS.keys()].findIndex(key => sameRgb(key, color))
+)
+const colorOfIndex = (index) => (
+  [...COLORS_COUNTS.keys()][index]
+)
+
+const SHARE_QUERY_KEY = 'x'
+
+const dataToUrl = (data, W=W, H=H) => {
+  const bytes = new Uint8Array(W*H/2+2) // 2 pix per byte + W and H
+  bytes[0] = W
+  bytes[1] = H
+  for (let i = 0; i < data.length; i += 2) {
+    const a = indexOfColor(data[i])
+    const b = indexOfColor(data[i+1])
+    if(a === -1 || b === -1) {
+      const clr = data[i + a === -1 ? 0 : 1]
+      console.error(`could not find color ${clr} (${rgbToCss(clr)})`)
+      return
+    }
+    bytes[2+i/2] = (a | b<<4)
+  }
+  const compressed = pako.deflateRaw(bytes)
+  const dataString = bufferToBase64(compressed)
+  const query = new URLSearchParams({
+    [SHARE_QUERY_KEY]: dataString,
+  }).toString().replace(/%2b/ig, '+').replace(/%2f/ig, '/')
+  return `${window.location.origin}${location.pathname}?${query}`
+}
+
+const dataFromUrl = () => {
+  const dataString = getQuery(SHARE_QUERY_KEY)
+  if (!dataString) {
+    return
+  }
+  const compressed = base64ToBuffer(dataString)
+  const bytes = pako.inflateRaw(compressed)
+  if (!bytes) {
+    console.error(`wrong data of '${SHARE_QUERY_KEY}' url param`)
+    return
+  }
+  const data = []
+  const [W, H, ...rest ] = bytes
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i] & 0x0F
+    const b = (rest[i] & 0xF0) >> 4
+    data.push(colorOfIndex(a))
+    data.push(colorOfIndex(b))
+  }
+  return {
+    W, H,
+    data,
+    NOEDIT: true,
+  }
+}
+
+// const stateToUrl = (state=defaultState) => {
+//   const { W, H, CROP} = state
+//   const ctx = canvas.getContext('2d')
+//   const data = ctx.getImageData(0, 0, W, H) // save current canvas data
+//   drawImageToCanvas(image, ctx, W, H, CROP) // render raw image
+//   const img = canvas.toDataURL('image/png') // get its url
+//   ctx.putImageData(data, 0, 0) // put the canvas data back
+
+//   const query = new URLSearchParams(
+//     Object.entries(state).reduce((obj, [key, val]) => (
+//       (val && !['set','data', 'COUNTS'].includes(key))
+//         ? {
+//           [key]: typeof val === 'string' ? val : Number(val),
+//           ...obj,
+//         }
+//         : obj
+//     ), {img})
+//   )
+//   return `${window.location.origin}${location.pathname}?${query}`
+// }
+
+// const urlToState = () => {
+//   const query = getQuery()
+//   return Object.entries(query).reduce((obj, [key, val]) => {
+//     const numVal = Number(val)
+//     return (val && !['img'].includes(key) )
+//       ? {
+//         [key]: isNaN(numVal) ? val : numVal,
+//         ...obj,
+//       }
+//       : obj
+//   }, {})
+// }
+
+
 const MATCHING_PRESET = {
   LIMIT: true,
   BLACK: true,
@@ -323,40 +420,6 @@ const COLORFUL_PRESET = {
   NOISE: 0.0625,
 }
 
-const stateToUrl = (state=defaultState) => {
-  const { W, H, CROP} = state
-  const ctx = canvas.getContext('2d')
-  const data = ctx.getImageData(0, 0, W, H) // save current canvas data
-  drawImageToCanvas(image, ctx, W, H, CROP) // render raw image
-  const img = canvas.toDataURL('image/png') // get its url
-  ctx.putImageData(data, 0, 0) // put the canvas data back
-
-  const query = new URLSearchParams(
-    Object.entries(state).reduce((obj, [key, val]) => (
-      (val && !['set','data', 'COUNTS'].includes(key))
-        ? {
-          [key]: typeof val === 'string' ? val : Number(val),
-          ...obj,
-        }
-        : obj
-    ), {img})
-  )
-  return `${window.location.origin}${location.pathname}?${query}`
-}
-
-const urlToState = () => {
-  const query = getQuery()
-  return Object.entries(query).reduce((obj, [key, val]) => {
-    const numVal = Number(val)
-    return (val && !['img'].includes(key) )
-      ? {
-        [key]: isNaN(numVal) ? val : numVal,
-        ...obj,
-      }
-      : obj
-  }, {})
-}
-
 const defaultState = {
   W: _W, H: _H,
   // ...MATCHING_PRESET,
@@ -374,7 +437,7 @@ const defaultState = {
       return map
   }, new Map()),
   data: range(_W*_H).map(() => BLACK),
-  ...urlToState(),
+  ...dataFromUrl(),
 }
 
 const defaultImg = getQuery("img") || `./images/face (${rand(12)+1}).webp`
@@ -402,9 +465,13 @@ const App = () => {
       <div class="svgs">
         <${Svgs} data=${state.data} width=${state.W} height=${state.H} />
       </div>
-      <div class="boxes">
-        <${Boxes} width=${state.W} height=${state.H} ...${state} set=${set} />
-      </div>
+      ${
+        !state.NOEDIT && html`
+          <div class="boxes">
+            <${Boxes} width=${state.W} height=${state.H} ...${state} set=${set} />
+          </div>
+        `
+      }
     </div>
   `
 }
@@ -593,9 +660,8 @@ const Boxes = (state) => {
   }
 
   const share = () => {
-    const url = stateToUrl(state)
-    prompt('copy this', url)
-    // window.location = url
+    const url = dataToUrl(state.data, W, H)
+    window.open(url)
   }
 
   return html`
@@ -1085,7 +1151,6 @@ function dithering(srcData, destData, filter=[[0]], availableColors, range=1) {
 render(html`<${App} />`, document.body)
 
 setTimeout(() => {
-  console.log('defaultImgae', defaultImg)
   if (!(window.location.protocol === 'file:' && defaultImg.includes('.'))) {
     image.src = defaultImg
   }
