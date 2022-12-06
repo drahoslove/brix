@@ -177,10 +177,74 @@ footer a {
     /* position: relative; */
   }
 }
+.print-menu {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  background-color: #666b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4em;
+  box-sizing: border-box;
+  margin-bottom: 2rem;
+}
+.print-menu div + div {
+  display: flex;
+  gap: 1rem;
+}
+.print-pages {
+  display: flex;
+  flex-wrap: wrap
+}
+.print-page {
+  display: flex;
+  flex-direction: column;
+  width: 20%;
+  text-align: center;
+}
+/* .print-page:nth-child(6) { opacity: 0.7; }
+.print-page:nth-child(7) { opacity: 0.4; }
+.print-page:nth-child(8) { opacity: 0.1; }
+.print-page:nth-child(9) { opacity: 0.04; }
+.print-page:nth-child(9) ~ .print-page { display: none;} */
 
-@media print {
-  div.boxes {
+.print-page-header {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  font-weight: bold;
+  margin-bottom: 1em;
+}
+.print-page-header .minimap {
+  width: 40%;
+}
+
+.print-page svg {
+  box-shadow: none;
+}
+
+@media screen {
+  .printonly {
     display: none;
+  }
+}
+@media print {
+  .noprint {
+    display: none;
+  }
+  .print-pages {
+    display: block;
+  }
+  .print-page {
+    display: flex !important;
+    width: 100%;
+    margin: auto;
+    page-break-after: always;
+    opacity: 1 !important;
+  }
+  .print-page-header {
+    font-size: 300%;
   }
 }
 </style>
@@ -318,8 +382,8 @@ const WHITE = [...(COLORS_COUNTS.keys())][0]
 const BLACK = [...(COLORS_COUNTS.keys())].pop()
 
 const Z = 9 // dot size
-const ZZ = 5 // zoom of dot in zoomed block
-const S = 16 // zoomed block size
+const ZZ = 5 // zoom of dot in Tile block
+const S = 16 // zoomed Tile block size
 
 const _W = 128 // default width
 const _H = 80 // default height
@@ -465,8 +529,39 @@ const defaultState = {
 
 const defaultImg = getQuery("img") || `./images/face (${rand(12)+1}).webp`
 
+const memoized = (func) => {
+  const cache = new Map()
+  return (arg) => {
+    let res = cache.get(arg)
+    if (res) {
+      return res
+    } else {
+      result = func(arg)
+      cache.set(arg, result)
+      return result
+    }
+  }
+}
+
+
+const dataOfTile = (data, W, H, x, y) => {
+  const xStart = x * S
+  const yStart = y * S
+  const tileData = []
+  for(let yy = 0; yy < S; yy++) {
+    for(let xx = 0; xx < S; xx++) {
+      const sourceI = (yStart + yy) * W + (xStart+ xx)
+      if (sourceI < data.length) { // can be out when changing orientation
+        tileData.push(data[sourceI])
+      }
+    }
+  }
+  return tileData
+}
+
 const App = () => {
   const [ state, setState ] = useState(defaultState)
+  const [ printView, setPrintView ] = useState(false)
 
   const set = (change) => {
     const newState = {
@@ -485,6 +580,75 @@ const App = () => {
 
   useEffect(() => { set({}) }, []) // ensure counts are updated from initial data
 
+  const togglePrint = () => setPrintView(!printView)
+
+
+  if (printView) {
+    const { data, W, H } = state
+    const [printCoords, setPrintCoords] = useState(true)
+    const [printBoards, setPrintBoards] = useState(false)
+    return html`
+      <div class="print-preview">
+        <div class="print-menu noprint">
+          <div><span class="mdi mdi-file-outline" /> Print preview</div>
+          <div>
+            <label>
+              <input type="checkbox" name="print-coords"
+                onChange=${(e) => {setPrintCoords(e.target.checked)}} checked=${printCoords}
+              />
+              print coords
+            </label>
+            <label>
+              <input type="checkbox" name="print-boards"
+                onChange=${(e) => {setPrintBoards(e.target.checked)}} checked=${printBoards}
+              />
+              print minimaps
+            </label>
+            <button onClick=${() => {window.print()}}>
+              <span class="mdi mid-printer"/>
+              PRINT
+            </button>
+          </div>
+          <div>
+            <button onClick=${togglePrint}>
+              <span class="mdi mdi-close" />
+            </button>
+          </div>
+        </div>
+        <div class="print-pages">
+          ${
+            range(H/S).map(y => range(W/S).map(x => {
+              const tileData = dataOfTile(data, W, H, x, y)
+              return html`
+                <div class="print-page">
+                  <div class="print-page-header">
+                    ${
+                      printCoords && (
+                        `${x+1}${String.fromCharCode('A'.charCodeAt() + y)}`
+                      )
+                    }
+                    ${
+                      printBoards && (
+                        html`<${Board}
+                          isMinimap
+                          data=${data}
+                          width=${W}
+                          height=${H}
+                          selectedTile=${{x, y}}
+                        />`
+                      )
+                    }
+                  </div>
+                  <${Tile} data=${tileData}/>
+                </div>
+              `
+            }))
+          }
+        </div>
+      </div>
+    `
+  }
+
   return html`
     <div class="svgs">
       <${Svgs} data=${state.data} width=${state.W} height=${state.H} />
@@ -492,46 +656,36 @@ const App = () => {
     ${
       !state.NOEDIT
         ? html`
-          <div class="boxes">
-            <${Boxes} width=${state.W} height=${state.H} ...${state} set=${set} />
+          <div class="boxes noprint">
+            <${Boxes} width=${state.W} height=${state.H} ...${state} set=${set} togglePrint=${togglePrint} />
           </div>
         `
         : html`
-          <div class="footerbox">
-            <${FooterBox} ...${state} />
+          <div class="footerbox noprint">
+            <${FooterBox} ...${state} togglePrint=${togglePrint} />
           </div>`
     }
   `
 }
 
 const Svgs = ({data, width: W, height: H}) => {
-  const [ {x, y}, setZoomBlock ] = useState({x: 0, y: 0})
+  const [ {x, y}, setSelectedTile ] = useState({x: 0, y: 0})
 
-  const xStart = x * S
-  const yStart = y * S
-  const zoomData = []
-  for(let yy = 0; yy < S; yy++) {
-    for(let xx = 0; xx <  S; xx++) {
-      const sourceI = (yStart + yy) * W + (xStart+ xx)
-      if (sourceI < data.length) { // can be out when changing orientation
-        zoomData.push(data[sourceI])
-      }
-    }
-  }
+  const zoomData = dataOfTile(data, W, H, x,y)
 
   return html`
-    <${ZoomBlock} data=${zoomData} />
+    <${Tile} data=${zoomData} />
     <${Board}
       data=${data}
       width=${W}
       height=${H}
-      zoomBlock=${{x, y}}
-      setZoomBlock=${setZoomBlock}
+      selectedTile=${{x, y}}
+      setSelectedTile=${setSelectedTile}
     />
   `
 }
 
-const ZoomBlock = ({data}) => {
+const Tile = ({data}) => {
   return html`
     <svg xmlns="http://www.w3.org/2000/svg"
       fill=${rgbToCss(BLACK)}
@@ -600,65 +754,60 @@ const ZoomBlock = ({data}) => {
   `
 }
 
-const Board = ({data, width: W, height: H, zoomBlock, setZoomBlock}) => {
-  const [zoom, setZoom] = useState({x:0, y:0})
+const Board = ({isMinimap, data, width: W, height: H, selectedTile, setSelectedTile}) => {
+  const [linkedTile, setLinkedTile] = useState({x:0, y:0})
   const onMouseEnter = (x, y) => {
-    setZoomBlock({x, y})
-  }
-  const onMouseLeave = (x, y) => {
-    setZoomBlock(zoom)
+    setSelectedTile?.({x, y})
   }
   const onMouseClick = (x, y) => {
-    setZoom({x, y})
+    setLinkedTile({x, y})
+  }
+  const onMouseLeave = (x, y) => {
+    setSelectedTile?.(linkedTile)
   }
   return html`
-    <svg id="board" xmlns="http://www.w3.org/2000/svg"
+    <svg id=${!isMinimap ? 'board' : ''} class=${isMinimap ? 'minimap' : 'board'} xmlns="http://www.w3.org/2000/svg"
       fill=${rgbToCss(BLACK)}
       width=${W * Z} height=${H * Z} viewBox="0 0 ${W * Z} ${H * Z}"
     >
-      <defs>
-      ${ // predefine only once for better perfs
-        [...COLORS_COUNTS.keys()].map(rgb => html`
-          <circle
-            id=${rgbToCss(rgb).substr(1)}
-            fill=${rgbToCss(rgb)}
-            r=${0.5 * Z}
-            cx=${Z/2}
-            cy=${Z/2}
-          />
-        `)
-      }
-      </defs>
+      
     ${
       range(H/S).map(y => range(W/S).map(x => ( // background tiles
-        html`
-          <rect
-            x=${x*Z*S}
-            y=${y*Z*S}
-            width=${S * Z}
-            height=${S * Z}
-          />
-        `
+        isMinimap && x === selectedTile.x && y === selectedTile.y
+          ? null
+          : html`
+            <rect
+              x=${x*Z*S}
+              y=${y*Z*S}
+              width=${S * Z}
+              height=${S * Z}
+            />
+          `
       )))
     }
     ${
       data.map((rgb, i) => {
         const x = i % W
         const y = (i - x)/W
-        return html`
-          <use
-            href=${rgbToCss(rgb)}
-            x=${x*Z}
-            y=${y*Z}
+        const tileX = (x-x%S)/S
+        const tileY = (y-y%S)/S
+        return isMinimap && tileX === selectedTile.x && tileY === selectedTile.y
+          ? null
+          : html`
+          <circle
+            fill=${rgbToCss(rgb)}
+            r=${0.5 * Z}
+            cx=${x*Z + Z/2}
+            cy=${y*Z + Z/2}
           />
-        `
+          `
       })
     }
     ${
-      range(H/S).map(y => range(W/S).map(x => ( // overlay tiles
+      !isMinimap && range(H/S).map(y => range(W/S).map(x => ( // overlay tiles
         html`
           <rect
-            class='overlay ${zoomBlock.x === x && zoomBlock.y === y ? 'selected' : ''}'
+            class='overlay ${selectedTile.x === x && selectedTile.y === y ? 'selected' : ''}'
             x=${x*Z*S}
             y=${y*Z*S}
             width=${S * Z}
@@ -674,7 +823,7 @@ const Board = ({data, width: W, height: H, zoomBlock, setZoomBlock}) => {
   `
 }
 
-const Boxes = (state) => {
+const Boxes = ({togglePrint,  ...state}) => {
   const {
     width: W,
     height: H,
@@ -861,12 +1010,12 @@ const Boxes = (state) => {
     </p>
   </div>
   <div class="box">
-    <${FooterBox} ...${state} />
+    <${FooterBox} ...${state} togglePrint=${togglePrint} />
   </div>
   `
 }
 
-const FooterBox = (state) => {
+const FooterBox = ({ togglePrint, ...state }) => {
   const {data, W, H} = state
   const downloadSvg = () => {
     const svgUrl = 'data:image/svg+xml;utf8,<?xml version="1.0" encoding="UTF-8"?>'+
@@ -899,6 +1048,9 @@ const FooterBox = (state) => {
       </button>
       <button onClick=${shareQR}>
         <span class="mdi mdi-qrcode-scan"/> QR
+      </button>
+      <button onClick=${togglePrint}>
+        <span class="mdi mdi-printer"/> print
       </button>
     </p>
     <footer>
@@ -1080,21 +1232,6 @@ const getDataFromImg = function(image, state) {
   }
 
   return result
-}
-
-
-const memoized = (func) => {
-  const cache = new Map()
-  return (arg) => {
-    let res = cache.get(arg)
-    if (res) {
-      return res
-    } else {
-      result = func(arg)
-      cache.set(arg, result)
-      return result
-    }
-  }
 }
 
 
