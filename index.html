@@ -187,7 +187,7 @@ footer a {
 </head> 
 <body>
 <script>
-const { html, render, useState } = htmPreact
+const { html, render, useState, useEffect } = htmPreact
 
 const rand = (n) =>  Math.floor(Math.random()*n)
 const range = (n) => Array.from({ length: n }).map((_, i) => i)
@@ -379,6 +379,7 @@ const dataFromUrl = () => {
     W, H,
     data,
     NOEDIT: true,
+    ...NOEDIT_PRESET,
   }
 }
 
@@ -416,15 +417,20 @@ const dataFromUrl = () => {
 //   }, {})
 // }
 
-
-const MATCHING_PRESET = {
-  LIMIT: true,
+const NOEDIT_PRESET = {
+  LIMIT: false,
   BLACK: true,
-  CHESS: true,
-  DIFFUSION: true,
+  DIFFUSION: false,
   BRIGHTNESS: 0,
   CONTRAST: 0,
   HUE: 0,
+  NOISE: 0,
+}
+const MATCHING_PRESET = {
+  ... NOEDIT_PRESET,
+  LIMIT: true,
+  CHESS: true,
+  DIFFUSION: true,
   NOISE: 0.125,
 }
 const COLORFUL_PRESET = {
@@ -448,11 +454,7 @@ const defaultState = {
   HUE: (rand(5)-2) * 15,
   CROP: true,
   SPREAD: ['radial', 'vertical', 'horizontal', 'squared'][rand(4)],
-  COUNTS: [...COLORS_COUNTS.keys()]
-    .reduce((map, rgb) => {
-      map.set(rgb, 0)
-      return map
-  }, new Map()),
+  COUNTS: new Map(),
   data: range(_W*_H).map(() => BLACK),
   ...dataFromUrl(),
 }
@@ -476,6 +478,8 @@ const App = () => {
     const data = getDataFromImg(image, newState)
     setState({ ...newState, data })
   }
+
+  useEffect(() => { set({}) }, []) // ensure counts are updated from initial data
 
   return html`
     <div class="svgs">
@@ -533,8 +537,8 @@ const ZoomBlock = ({data}) => {
       data.map((rgb, i) => {
         const x = i % S
         const y = (i - x)/S
-        const isBoard = String(rgb) === String(BLACK)
-        const doStud = isBoard || String(rgb) === String(WHITE)
+        const isBoard = sameRgb(rgb, BLACK)
+        const doStud = isBoard || sameRgb(rgb, WHITE)
         const doHollowStud = isBoard && (
           (x == 0 || x == S-1) && (y >= 2 && y <= S - 3) ||
           (y == 0 || y == S-1) && (x >= 2 && x <= S - 3)
@@ -881,7 +885,7 @@ const Palette = (state) => {
   return html`
     <code>
     ${[...COLORS_COUNTS.entries()]
-      .filter(([color]) => state.BLACK || String(color) !== String(BLACK))
+      .filter(([color]) => state.BLACK || !sameRgb(color, BLACK))
       .map(([color, count], i) => (
         html`
           <span class="mdi mdi-${i < 10 ? `numeric-${i+1}-` : '' }circle" />
@@ -921,11 +925,14 @@ const getDataFromImg = function(image, state) {
   const { W, H } = state
   
   if (!cn) {
-    throw Error("Canvas ref not ready")
+    for (let clr of state.data) {
+      state.COUNTS.set(clr, state.COUNTS.get(clr)+1)
+    }
+    console.warn("Canvas ref not ready")
     return state.data
   }
   if (!image.complete) {
-    throw Error("Image not loaded yet")
+    console.warn("Image not loaded yet")
     return state.data
   }
   cn.width = W
@@ -978,7 +985,7 @@ const getDataFromImg = function(image, state) {
     const ditheredData = new ImageData(W, H)
 
     const availableColors = [...COLORS_COUNTS.keys()]
-      .filter(rgb => state.BLACK || String(rgb) !== String(BLACK))
+      .filter(rgb => state.BLACK || !sameRgb(rgb, BLACK))
     errorBuffer = dithering(imageData, ditheredData, filter, availableColors, 1)
   }
   const bytes = imageData.data
@@ -1034,7 +1041,7 @@ const getDataFromImg = function(image, state) {
       b += errorBuffer[i][2]
     }
     const availableColors = [...COLORS_COUNTS.keys()]
-      .filter(rgb => state.BLACK || String(rgb) !== String(BLACK))
+      .filter(rgb => state.BLACK || !sameRgb(rgb, BLACK))
       .filter(rgb => !state.LIMIT || state.COUNTS.get(rgb) < COLORS_COUNTS.get(rgb))
     const [clr] = closestColor([r, g, b], availableColors, state.DIFFUSION ? adjustLightnessForRoundTiles : adjustBrightnessForRoundTiles)
     result[i] = clr
