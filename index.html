@@ -193,7 +193,11 @@ const rand = (n) =>  Math.floor(Math.random()*n)
 const range = (n) => Array.from({ length: n }).map((_, i) => i)
 const clamp = (min, max, val) => Math.max(min, Math.min(max, val))
 const bufferToBase64 = (bytes) => btoa(String.fromCharCode(...bytes))
-const base64ToBuffer = (str) => Uint8Array.from(atob(str), c => c.charCodeAt(0))
+  .replace(/\+/g, '-').replace(/\//g,'_').replace(/\=/g,'')
+const base64ToBuffer = (str) => Uint8Array.from(
+  atob(str.replace(/\-/g, '+').replace(/\_/g,'/')),
+  c => c.charCodeAt(0),
+)
 
 
 const rgbToCss = (rgb) => (
@@ -350,9 +354,9 @@ const dataToUrl = (data, W=W, H=H) => {
   }
   const compressed = pako.deflateRaw(bytes)
   const dataString = bufferToBase64(compressed)
-  const query = new URLSearchParams({
+  const query = decodeURIComponent(new URLSearchParams({
     [SHARE_QUERY_KEY]: dataString,
-  }).toString()//.replace(/%2b/ig, '+').replace(/%2f/ig, '/').replace(/%3d/ig,'=')
+  }))
   return `${window.location.origin}${location.pathname}?${query}`
 }
 
@@ -612,6 +616,19 @@ const Board = ({data, width: W, height: H, zoomBlock, setZoomBlock}) => {
       fill=${rgbToCss(BLACK)}
       width=${W * Z} height=${H * Z} viewBox="0 0 ${W * Z} ${H * Z}"
     >
+      <defs>
+      ${ // predefine only once for better perfs
+        [...COLORS_COUNTS.keys()].map(rgb => html`
+          <circle
+            id=${rgbToCss(rgb).substr(1)}
+            fill=${rgbToCss(rgb)}
+            r=${0.5 * Z}
+            cx=${Z/2}
+            cy=${Z/2}
+          />
+        `)
+      }
+      </defs>
     ${
       range(H/S).map(y => range(W/S).map(x => ( // background tiles
         html`
@@ -629,11 +646,10 @@ const Board = ({data, width: W, height: H, zoomBlock, setZoomBlock}) => {
         const x = i % W
         const y = (i - x)/W
         return html`
-          <circle
-            fill=${rgbToCss(rgb)}
-            cx=${x*Z + Z/2}
-            cy=${y*Z + Z/2}
-            r=${0.5 * Z}
+          <use
+            href=${rgbToCss(rgb)}
+            x=${x*Z}
+            y=${y*Z}
           />
         `
       })
@@ -852,6 +868,17 @@ const Boxes = (state) => {
 
 const FooterBox = (state) => {
   const {data, W, H} = state
+  const downloadSvg = () => {
+    const svgUrl = 'data:image/svg+xml;utf8,<?xml version="1.0" encoding="UTF-8"?>'+
+      escape(document.querySelector('#board').outerHTML
+        .replace(/></g, '>\n<')
+        .replace(/<rect class="overlay.*\n<\/rect>/gim,'')
+      )
+    const link = document.createElement("a")
+    link.href = svgUrl
+    link.download = `brix-${Date.now()}.svg`
+    link.click()
+  }
   const shareLink = () => {
     const url = dataToUrl(data, W, H)
     window.open(url)
@@ -864,13 +891,14 @@ const FooterBox = (state) => {
   return html`
     <${Palette} ...${state} />
     <p class="center">
+      <button onClick=${downloadSvg}>
+        <span class="mdi mdi-image"/> svg
+      </button>
       <button onClick=${shareLink}>
-        <span class="mdi mdi-share-variant"/>${' '}
-        link
+        <span class="mdi mdi-share-variant"/> link
       </button>
       <button onClick=${shareQR}>
-        <span class="mdi mdi-qrcode-scan"/>${' '}
-        QR
+        <span class="mdi mdi-qrcode-scan"/> QR
       </button>
     </p>
     <footer>
